@@ -34,83 +34,97 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 void MainWindow::buildUi() {
-    setWindowTitle(QStringLiteral("算法驱动的迷宫设计 - Qt 图形化课程设计"));
-    resize(1220, 780);
+    setWindowTitle(QStringLiteral("算法驱动的迷宫设计"));
+    resize(1280, 820);
 
     auto *splitter = new QSplitter(this);
+    splitter->setHandleWidth(2);
     mazeWidget_ = new MazeWidget(splitter);
 
     auto *scrollArea = new QScrollArea(splitter);
     scrollArea->setWidgetResizable(true);
-    scrollArea->setMinimumWidth(350);
-    scrollArea->setMaximumWidth(430);
+    scrollArea->setMinimumWidth(380);
+    scrollArea->setMaximumWidth(460);
+    scrollArea->setFrameShape(QFrame::NoFrame);
     auto *panel = new QWidget;
     auto *panelLayout = new QVBoxLayout(panel);
-    panelLayout->setContentsMargins(14, 14, 14, 14);
-    panelLayout->setSpacing(12);
+    panelLayout->setContentsMargins(16, 16, 16, 16);
+    panelLayout->setSpacing(10);
 
-    auto *title = new QLabel(QStringLiteral("迷宫设计任务控制台"));
-    QFont titleFont = title->font();
-    titleFont.setPointSize(15);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    auto *title = new QLabel(QStringLiteral("迷宫设计控制台"));
+    title->setObjectName(QStringLiteral("panelTitle"));
     panelLayout->addWidget(title);
 
     auto *legend = new QLabel(QStringLiteral(
-        "S 起点  B 独立 BOSS 格  E 终点  ● 金币(+50)  ▲ 陷阱(-30)\n"
-        "蓝线为动态规划得到的最优资源收集行走路径。"));
-    legend->setWordWrap(true);
-    legend->setStyleSheet(QStringLiteral("color:#52616b;"));
+        "S 起点   B BOSS   E 终点   ● 金币(+50)   ▲ 陷阱(-30)"));
+    legend->setObjectName(QStringLiteral("legendLabel"));
     panelLayout->addWidget(legend);
 
-    auto *generationGroup = new QGroupBox(QStringLiteral("任务 1：多方法生成完美迷宫"));
+    auto makeSeparator = []() {
+        auto *sep = new QFrame;
+        sep->setFrameShape(QFrame::HLine);
+        sep->setObjectName(QStringLiteral("separator"));
+        return sep;
+    };
+
+    auto *generationGroup = new QGroupBox(QStringLiteral("① 多方法生成完美迷宫"));
+    generationGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *generationLayout = new QVBoxLayout(generationGroup);
+    generationLayout->setSpacing(8);
     auto *generationForm = new QFormLayout;
+    generationForm->setSpacing(6);
+    generationForm->setLabelAlignment(Qt::AlignRight);
     algorithmBox_ = new QComboBox;
+    algorithmBox_->setObjectName(QStringLiteral("inputControl"));
     algorithmBox_->addItems({QStringLiteral("分治"),
-                             QStringLiteral("贪心 / Kruskal 最小生成树"),
+                             QStringLiteral("贪心 / Kruskal MST"),
                              QStringLiteral("回溯 / DFS"),
-                             QStringLiteral("分支限界 / 严格分层 BFS")});
+                             QStringLiteral("分支限界 / BFS")});
     rowsSpin_ = new QSpinBox;
+    rowsSpin_->setObjectName(QStringLiteral("inputControl"));
     rowsSpin_->setRange(5, 31);
     rowsSpin_->setSingleStep(2);
     rowsSpin_->setValue(15);
     columnsSpin_ = new QSpinBox;
+    columnsSpin_->setObjectName(QStringLiteral("inputControl"));
     columnsSpin_->setRange(5, 31);
     columnsSpin_->setSingleStep(2);
     columnsSpin_->setValue(15);
     seedSpin_ = new QSpinBox;
+    seedSpin_->setObjectName(QStringLiteral("inputControl"));
     seedSpin_->setRange(1, 999999999);
     seedSpin_->setValue(202506);
     animationSpin_ = new QSpinBox;
+    animationSpin_->setObjectName(QStringLiteral("inputControl"));
     animationSpin_->setRange(1, 200);
     animationSpin_->setValue(12);
-    animationSpin_->setSuffix(QStringLiteral(" ms/步"));
+    animationSpin_->setSuffix(QStringLiteral(" ms"));
     generationForm->addRow(QStringLiteral("算法"), algorithmBox_);
-    generationForm->addRow(QStringLiteral("输出矩阵行数"), rowsSpin_);
-    generationForm->addRow(QStringLiteral("输出矩阵列数"), columnsSpin_);
-    generationForm->addRow(QStringLiteral("随机种子"), seedSpin_);
+    generationForm->addRow(QStringLiteral("矩阵行数"), rowsSpin_);
+    generationForm->addRow(QStringLiteral("矩阵列数"), columnsSpin_);
+    generationForm->addRow(QStringLiteral("种子"), seedSpin_);
     generationForm->addRow(QStringLiteral("动画速度"), animationSpin_);
     generationLayout->addLayout(generationForm);
 
     auto *generateButton = new QPushButton(QStringLiteral("生成并播放过程"));
+    generateButton->setObjectName(QStringLiteral("primaryButton"));
     generationLayout->addWidget(generateButton);
     validationLabel_ = new QLabel;
+    validationLabel_->setObjectName(QStringLiteral("resultLabel"));
     validationLabel_->setWordWrap(true);
     generationLayout->addWidget(validationLabel_);
 
     auto *complexityLabel = new QLabel;
+    complexityLabel->setObjectName(QStringLiteral("infoCard"));
     complexityLabel->setWordWrap(true);
-    complexityLabel->setStyleSheet(QStringLiteral(
-        "background:#eef5f5; color:#264b4b; padding:8px; border-radius:5px;"));
     generationLayout->addWidget(complexityLabel);
     panelLayout->addWidget(generationGroup);
 
     const QStringList complexityDescriptions{
-        QStringLiteral("分治：递归拆分矩形区域，每次只连接两个子迷宫一次。时间 O(V)，递归空间 O(log V)（均衡时），结构分区明显。"),
-        QStringLiteral("Kruskal MST：随机边排序并用并查集防环。时间 O(E log E)，空间 O(V+E)，分支较均衡。"),
-        QStringLiteral("回溯 DFS：深入未访问邻格，遇到死路回退。时间 O(V+E)，空间 O(V)，长走廊较多。"),
-        QStringLiteral("BFS 分支限界：候选迷宫严格按深度层扩展，随机代价只打散同层分支，visited 剪去重复与成环状态；固定次数随机重启后选取解路径更长的迷宫。时间 O(E log E)，空间 O(E)。")};
+        QStringLiteral("分治  O(V) 时间 / O(log V) 空间\n递归拆分矩形区域，每次只连接两个子迷宫一次。结构分区明显。"),
+        QStringLiteral("Kruskal MST  O(E log E) 时间 / O(V+E) 空间\n随机边排序并用并查集防环。分支较均衡。"),
+        QStringLiteral("回溯 DFS  O(V+E) 时间 / O(V) 空间\n深入未访问邻格，遇到死路回退。长走廊较多。"),
+        QStringLiteral("BFS 分支限界  O(E log E) 时间 / O(E) 空间\n候选迷宫按深度层扩展，多次随机重启选最优。")};
     auto updateComplexity = [=](int index) {
         complexityLabel->setText(complexityDescriptions.value(index));
     };
@@ -118,71 +132,107 @@ void MainWindow::buildUi() {
     updateComplexity(algorithmBox_->currentIndex());
     connect(generateButton, &QPushButton::clicked, this, &MainWindow::generateMaze);
 
-    auto *resourceGroup = new QGroupBox(QStringLiteral("任务 2：动态规划资源收集"));
+    panelLayout->addWidget(makeSeparator());
+
+    auto *resourceGroup = new QGroupBox(QStringLiteral("② 动态规划资源收集"));
+    resourceGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *resourceLayout = new QVBoxLayout(resourceGroup);
+    resourceLayout->setSpacing(8);
     auto *resourceForm = new QFormLayout;
+    resourceForm->setSpacing(6);
+    resourceForm->setLabelAlignment(Qt::AlignRight);
     coinSpin_ = new QSpinBox;
+    coinSpin_->setObjectName(QStringLiteral("inputControl"));
     coinSpin_->setRange(0, 300);
     coinSpin_->setValue(8);
     trapSpin_ = new QSpinBox;
+    trapSpin_->setObjectName(QStringLiteral("inputControl"));
     trapSpin_->setRange(0, 300);
     trapSpin_->setValue(6);
-    resourceForm->addRow(QStringLiteral("金币数量"), coinSpin_);
-    resourceForm->addRow(QStringLiteral("陷阱数量"), trapSpin_);
+    resourceForm->addRow(QStringLiteral("金币"), coinSpin_);
+    resourceForm->addRow(QStringLiteral("陷阱"), trapSpin_);
     resourceLayout->addLayout(resourceForm);
     auto *resourceButtons = new QHBoxLayout;
+    resourceButtons->setSpacing(8);
     auto *placeButton = new QPushButton(QStringLiteral("重新布置"));
+    placeButton->setObjectName(QStringLiteral("secondaryButton"));
     auto *solveResourceButton = new QPushButton(QStringLiteral("DP 求最优路径"));
+    solveResourceButton->setObjectName(QStringLiteral("primaryButton"));
     resourceButtons->addWidget(placeButton);
     resourceButtons->addWidget(solveResourceButton);
     resourceLayout->addLayout(resourceButtons);
     resourceResultLabel_ = new QLabel(QStringLiteral("尚未求解"));
+    resourceResultLabel_->setObjectName(QStringLiteral("resultLabel"));
     resourceResultLabel_->setWordWrap(true);
     resourceLayout->addWidget(resourceResultLabel_);
     panelLayout->addWidget(resourceGroup);
     connect(placeButton, &QPushButton::clicked, this, &MainWindow::placeResources);
     connect(solveResourceButton, &QPushButton::clicked, this, &MainWindow::solveResources);
 
-    auto *bossGroup = new QGroupBox(QStringLiteral("任务 3：分支限界 BOSS 战"));
+    panelLayout->addWidget(makeSeparator());
+
+    auto *bossGroup = new QGroupBox(QStringLiteral("③ 分支限界 BOSS 战"));
+    bossGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *bossLayout = new QVBoxLayout(bossGroup);
+    bossLayout->setSpacing(8);
     auto *bossForm = new QFormLayout;
+    bossForm->setSpacing(6);
+    bossForm->setLabelAlignment(Qt::AlignRight);
     bossHealthEdit_ = new QLineEdit(QStringLiteral("11,13,9,15"));
+    bossHealthEdit_->setObjectName(QStringLiteral("inputControl"));
+    bossHealthEdit_->setPlaceholderText(QStringLiteral("如 35,45,60"));
     skillsEdit_ = new QLineEdit(
         QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
+    skillsEdit_->setObjectName(QStringLiteral("inputControl"));
+    skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却"));
     skillsEdit_->setToolTip(QStringLiteral("格式：名称:伤害:冷却；至少一个技能冷却为 0"));
     extraTurnsSpin_ = new QSpinBox;
+    extraTurnsSpin_->setObjectName(QStringLiteral("inputControl"));
     extraTurnsSpin_->setRange(1, 9999);
     extraTurnsSpin_->setValue(20);
     reviveCostSpin_ = new QSpinBox;
+    reviveCostSpin_->setObjectName(QStringLiteral("inputControl"));
     reviveCostSpin_->setRange(0, 1000);
     reviveCostSpin_->setValue(5);
     bossForm->addRow(QStringLiteral("BOSS 血量"), bossHealthEdit_);
-    bossForm->addRow(QStringLiteral("技能 名称:伤害:冷却"), skillsEdit_);
-    bossForm->addRow(QStringLiteral("限定回合数 minRouds"), extraTurnsSpin_);
-    bossForm->addRow(QStringLiteral("失败金币消耗"), reviveCostSpin_);
+    bossForm->addRow(QStringLiteral("技能"), skillsEdit_);
+    bossForm->addRow(QStringLiteral("限定回合"), extraTurnsSpin_);
+    bossForm->addRow(QStringLiteral("复活金币"), reviveCostSpin_);
     bossLayout->addLayout(bossForm);
-    auto *solveBossButton = new QPushButton(QStringLiteral("分支限界求最优技能序列"));
-    bossLayout->addWidget(solveBossButton);
-    auto *battleAnimationButton = new QPushButton(QStringLiteral("打开可视化战斗动画"));
-    bossLayout->addWidget(battleAnimationButton);
+    auto *bossButtons = new QHBoxLayout;
+    bossButtons->setSpacing(8);
+    auto *solveBossButton = new QPushButton(QStringLiteral("求解最优序列"));
+    solveBossButton->setObjectName(QStringLiteral("primaryButton"));
+    auto *battleAnimationButton = new QPushButton(QStringLiteral("战斗动画"));
+    battleAnimationButton->setObjectName(QStringLiteral("accentButton"));
+    bossButtons->addWidget(solveBossButton);
+    bossButtons->addWidget(battleAnimationButton);
+    bossLayout->addLayout(bossButtons);
     bossOutput_ = new QPlainTextEdit;
+    bossOutput_->setObjectName(QStringLiteral("outputConsole"));
     bossOutput_->setReadOnly(true);
-    bossOutput_->setMaximumHeight(150);
-    bossOutput_->setPlaceholderText(QStringLiteral("求解结果会显示在这里"));
+    bossOutput_->setMaximumHeight(120);
+    bossOutput_->setPlaceholderText(QStringLiteral("求解结果..."));
     bossLayout->addWidget(bossOutput_);
     panelLayout->addWidget(bossGroup);
     connect(solveBossButton, &QPushButton::clicked, this, &MainWindow::solveBossBattle);
     connect(battleAnimationButton, &QPushButton::clicked,
             this, &MainWindow::showBattleAnimation);
 
+    panelLayout->addWidget(makeSeparator());
+
     auto *aiGroup = new QGroupBox(QStringLiteral("AI 玩家探险"));
+    aiGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *aiLayout = new QVBoxLayout(aiGroup);
-    auto *aiButton = new QPushButton(QStringLiteral("运行贪心 AI 玩家"));
+    aiLayout->setSpacing(8);
+    auto *aiButton = new QPushButton(QStringLiteral("运行贪心 AI"));
+    aiButton->setObjectName(QStringLiteral("accentButton"));
     aiLayout->addWidget(aiButton);
     panelLayout->addWidget(aiGroup);
     connect(aiButton, &QPushButton::clicked, this, &MainWindow::runAiPlayer);
 
-    auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家输入 JSON"));
+    auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家 JSON"));
+    exportButton->setObjectName(QStringLiteral("secondaryButton"));
     panelLayout->addWidget(exportButton);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::exportMaze);
     panelLayout->addStretch();
@@ -222,13 +272,115 @@ void MainWindow::buildUi() {
         }
     });
 
-    setStyleSheet(QStringLiteral(
-        "QMainWindow{background:#f4f7f8;}"
-        "QGroupBox{font-weight:600; border:1px solid #cfdadd; border-radius:7px;"
-        " margin-top:10px; padding:12px 8px 8px 8px; background:white;}"
-        "QGroupBox::title{subcontrol-origin:margin; left:10px; padding:0 5px;}"
-        "QPushButton{background:#167d7d; color:white; border:0; border-radius:5px; padding:7px;}"
-        "QPushButton:hover{background:#116565;}"));
+    setStyleSheet(QStringLiteral(R"(
+        QMainWindow { background: #0f172a; }
+        QSplitter::handle { background: #334155; }
+
+        QScrollArea { background: #0f172a; border: none; }
+        QScrollArea > QWidget > QWidget { background: #0f172a; }
+
+        #panelTitle {
+            color: #f8fafc; font-size: 18px; font-weight: 700;
+            padding: 4px 0 2px 0; letter-spacing: 1px;
+        }
+        #legendLabel {
+            color: #94a3b8; font-size: 11px; padding: 2px 0 6px 0;
+        }
+        #separator {
+            border: none; border-top: 1px solid #1e293b;
+            margin: 4px 0;
+        }
+
+        QGroupBox#taskGroup {
+            color: #e2e8f0; font-size: 13px; font-weight: 600;
+            border: 1px solid #334155; border-radius: 8px;
+            margin-top: 14px; padding: 14px 10px 10px 10px;
+            background: #1e293b;
+        }
+        QGroupBox#taskGroup::title {
+            subcontrol-origin: margin; left: 12px; padding: 0 6px;
+            color: #fbbf24;
+        }
+
+        #infoCard {
+            background: #172554; color: #93c5fd;
+            padding: 10px; border-radius: 6px; font-size: 11px;
+            border: 1px solid #1e3a5f;
+        }
+
+        QLabel { color: #cbd5e1; font-size: 12px; }
+        QLabel#resultLabel {
+            color: #a7f3d0; font-size: 12px;
+            padding: 6px 8px; background: #064e3b;
+            border-radius: 5px; border: 1px solid #065f46;
+        }
+
+        QFormLayout QLabel { color: #94a3b8; font-size: 12px; }
+
+        QSpinBox#inputControl, QComboBox#inputControl, QLineEdit#inputControl {
+            background: #0f172a; color: #e2e8f0;
+            border: 1px solid #475569; border-radius: 5px;
+            padding: 5px 8px; font-size: 12px; min-height: 22px;
+        }
+        QSpinBox#inputControl:focus, QComboBox#inputControl:focus,
+        QLineEdit#inputControl:focus {
+            border-color: #fbbf24;
+        }
+        QComboBox#inputControl::drop-down {
+            border: none; width: 20px;
+        }
+        QComboBox#inputControl::down-arrow {
+            image: none; border-left: 4px solid transparent;
+            border-right: 4px solid transparent; border-top: 5px solid #94a3b8;
+            margin-right: 6px;
+        }
+        QComboBox#inputControl QAbstractItemView {
+            background: #1e293b; color: #e2e8f0;
+            selection-background-color: #334155;
+            border: 1px solid #475569;
+        }
+
+        QPlainTextEdit#outputConsole {
+            background: #0c1222; color: #a7f3d0;
+            border: 1px solid #334155; border-radius: 6px;
+            padding: 8px; font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 11px;
+        }
+
+        QPushButton#primaryButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f59e0b, stop:1 #d97706);
+            color: #1c1917; font-weight: 700; font-size: 12px;
+            border: none; border-radius: 6px; padding: 8px 14px;
+        }
+        QPushButton#primaryButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fbbf24, stop:1 #f59e0b);
+        }
+        QPushButton#primaryButton:pressed { background: #b45309; }
+
+        QPushButton#secondaryButton {
+            background: #334155; color: #e2e8f0; font-size: 12px;
+            border: 1px solid #475569; border-radius: 6px; padding: 8px 14px;
+        }
+        QPushButton#secondaryButton:hover { background: #475569; }
+        QPushButton#secondaryButton:pressed { background: #1e293b; }
+
+        QPushButton#accentButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #06b6d4, stop:1 #0891b2);
+            color: #0c1222; font-weight: 700; font-size: 12px;
+            border: none; border-radius: 6px; padding: 8px 14px;
+        }
+        QPushButton#accentButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #22d3ee, stop:1 #06b6d4);
+        }
+        QPushButton#accentButton:pressed { background: #0e7490; }
+
+        QStatusBar { background: #0f172a; color: #94a3b8; font-size: 11px; }
+        QStatusBar::item { border: none; }
+    )"));
 }
 
 void MainWindow::generateMaze() {
@@ -280,7 +432,8 @@ void MainWindow::solveResources() {
     mazeWidget_->setRevealCount(maze_.generationSteps().size());
     lastPlan_ = maze_.optimalResourceWalk();
     resourceResultLabel_->setText(
-        QStringLiteral("最多资源：%1；行走 %2 步；首次经过 %3 个格子。路径允许回访，金币/陷阱只计一次。")
+        QStringLiteral("<b>最多资源：%1</b>  |  行走 %2 步  |  首经 %3 格<br/>"
+                       "<span style='color:#94a3b8;font-size:11px'>路径允许回访，金币/陷阱只计一次</span>")
             .arg(lastPlan_.maxValue)
             .arg(std::max(0, static_cast<int>(lastPlan_.walk.size()) - 1))
             .arg(lastPlan_.collectedCells.size()));
@@ -366,8 +519,8 @@ void MainWindow::solveBossBattle() {
         sequenceNames.append(skills[skillIndex].name);
     }
     bossOutput_->setPlainText(
-        QStringLiteral("最少回合数：%1\n限定回合数：%2\n复活所需金币：%3\n"
-                       "最优技能序列：%4\n搜索状态：%5，剪枝：%6")
+        QStringLiteral("最少回合数：%1\n限定回合数：%2\n复活金币：%3\n"
+                       "最优序列：%4\n搜索：%5 展开 / %6 剪枝")
             .arg(lastBossResult_.minimumTurns)
             .arg(extraTurnsSpin_->value())
             .arg(reviveCostSpin_->value())
@@ -433,7 +586,8 @@ void MainWindow::updateValidation() {
     const bool valid = maze_.validatePerfect(&reason);
     const MazeStatistics stats = maze_.statistics();
     validationLabel_->setText(
-        QStringLiteral("%1\n输出矩阵：%2×%3；挑战性：解路径 %4 步，死路 %5，分叉点 %6，最长走廊 %7")
+        QStringLiteral("<b>%1</b><br/>"
+                       "<span style='font-size:11px'>矩阵 %2×%3  |  路径 %4 步  |  死路 %5  |  分叉 %6  |  最长走廊 %7</span>")
             .arg(reason)
             .arg(maze_.rows() * 2 + 1)
             .arg(maze_.columns() * 2 + 1)
