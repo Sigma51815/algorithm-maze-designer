@@ -61,6 +61,8 @@ void MazeModel::reset(int rows, int columns, quint32 seed) {
     passages_.fill({false, false, false, false}, cellCount());
     resources_.fill(0, cellCount());
     generationSteps_.clear();
+    startCell_ = 0;
+    endCell_ = cellCount() - 1;
     random_.seed(seed);
 }
 
@@ -80,6 +82,34 @@ void MazeModel::generate(int rows, int columns, MazeAlgorithm algorithm, quint32
         generateBreadthFirst();
         break;
     }
+    chooseDiameterEndpoints();
+}
+
+void MazeModel::chooseDiameterEndpoints() {
+    auto farthestFrom = [&](int source) {
+        QVector<int> distance(cellCount(), -1);
+        QQueue<int> queue;
+        distance[source] = 0;
+        queue.enqueue(source);
+        int farthest = source;
+        while (!queue.isEmpty()) {
+            const int current = queue.dequeue();
+            if (distance[current] > distance[farthest]) {
+                farthest = current;
+            }
+            for (int next : neighbors(current)) {
+                if (distance[next] >= 0) {
+                    continue;
+                }
+                distance[next] = distance[current] + 1;
+                queue.enqueue(next);
+            }
+        }
+        return farthest;
+    };
+
+    startCell_ = farthestFrom(0);
+    endCell_ = farthestFrom(startCell_);
 }
 
 QVector<int> MazeModel::gridNeighbors(int cell) const {
@@ -215,51 +245,76 @@ void MazeModel::generateBreadthFirst() {
         }
     };
 
-    QVector<bool> visited(cellCount(), false);
-    QVector<int> degree(cellCount(), 0);
-    std::priority_queue<FrontierBranch, QVector<FrontierBranch>, WorseBranch> frontier;
-    std::uniform_int_distribution<int> randomCost(0, 999);
-    std::uniform_int_distribution<quint32> tieBreaker;
+    QVector<std::array<bool, 4>> bestPassages;
+    QVector<MazeEdge> bestSteps;
+    int bestScore = -1;
+    const int directDistance = rows_ + columns_ - 2;
 
-    auto addBranches = [&](int cell, int depth) {
-        QVector<int> choices = gridNeighbors(cell);
-        std::shuffle(choices.begin(), choices.end(), random_);
-        for (int next : choices) {
-            if (visited[next]) {
+    for (int attempt = 0; attempt < 12; ++attempt) {
+        passages_.fill({false, false, false, false}, cellCount());
+        generationSteps_.clear();
+
+        QVector<bool> visited(cellCount(), false);
+        QVector<int> degree(cellCount(), 0);
+        std::priority_queue<FrontierBranch, QVector<FrontierBranch>, WorseBranch> frontier;
+        std::uniform_int_distribution<int> randomCost(0, 99);
+        std::uniform_int_distribution<quint32> tieBreaker;
+
+        auto addBranches = [&](int cell, int depth) {
+            QVector<int> choices = gridNeighbors(cell);
+            std::shuffle(choices.begin(), choices.end(), random_);
+            for (int next : choices) {
+                if (visited[next]) {
+                    continue;
+                }
+                const int randomWeight = randomCost(random_);
+                const int lowerBound = depth * 10000 + degree[cell] * 100
+                    + randomWeight;
+                frontier.push({lowerBound, tieBreaker(random_), cell, next, depth,
+                               randomWeight, degree[cell]});
+            }
+        };
+
+        std::uniform_int_distribution<int> rootDistribution(0, cellCount() - 1);
+        const int root = rootDistribution(random_);
+        visited[root] = true;
+        addBranches(root, 1);
+
+        while (!frontier.empty()) {
+            FrontierBranch branch = frontier.top();
+            frontier.pop();
+            if (visited[branch.to]) {
                 continue;
             }
-            // The depth term keeps breadth-first behavior. Random edge cost and
-            // the degree penalty prevent one shallow cell from opening every
-            // adjacent branch and producing a comb-shaped spanning tree.
-            const int randomWeight = randomCost(random_);
-            const int lowerBound = depth * 12 + degree[cell] * 90 + randomWeight;
-            frontier.push({lowerBound, tieBreaker(random_), cell, next, depth,
-                           randomWeight, degree[cell]});
+            if (branch.sourceDegree != degree[branch.from]) {
+                branch.sourceDegree = degree[branch.from];
+                branch.lowerBound = branch.depth * 10000 + branch.sourceDegree * 100
+                    + branch.randomWeight;
+                frontier.push(branch);
+                continue;
+            }
+            visited[branch.to] = true;
+            carve(branch.from, branch.to);
+            ++degree[branch.from];
+            ++degree[branch.to];
+            addBranches(branch.to, branch.depth + 1);
         }
-    };
 
-    visited[startCell()] = true;
-    addBranches(startCell(), 1);
-
-    while (!frontier.empty()) {
-        FrontierBranch branch = frontier.top();
-        frontier.pop();
-        if (visited[branch.to]) {
-            continue;
+        chooseDiameterEndpoints();
+        const MazeStatistics stats = statistics();
+        const int score = stats.solutionLength * 10 + stats.deadEnds;
+        if (score > bestScore) {
+            bestScore = score;
+            bestPassages = passages_;
+            bestSteps = generationSteps_;
         }
-        if (branch.sourceDegree != degree[branch.from]) {
-            branch.sourceDegree = degree[branch.from];
-            branch.lowerBound = branch.depth * 12 + branch.sourceDegree * 90
-                + branch.randomWeight;
-            frontier.push(branch);
-            continue;
+        if (stats.solutionLength >= directDistance + 6) {
+            break;
         }
-        visited[branch.to] = true;
-        carve(branch.from, branch.to);
-        ++degree[branch.from];
-        ++degree[branch.to];
-        addBranches(branch.to, branch.depth + 1);
     }
+
+    passages_ = bestPassages;
+    generationSteps_ = bestSteps;
 }
 
 int MazeModel::resourceAt(int cell) const {
@@ -302,20 +357,74 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
         return;
     }
     resources_.fill(0, cellCount());
-    QVector<int> available;
-    for (int cell = 1; cell < endCell(); ++cell) {
-        available.append(cell);
-    }
     std::mt19937 engine(seed);
-    std::shuffle(available.begin(), available.end(), engine);
-    const int availableCount = static_cast<int>(available.size());
+
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> queue;
+    parent[startCell()] = startCell();
+    queue.enqueue(startCell());
+    while (!queue.isEmpty() && parent[endCell()] < 0) {
+        const int current = queue.dequeue();
+        for (int next : neighbors(current)) {
+            if (parent[next] < 0) {
+                parent[next] = current;
+                queue.enqueue(next);
+            }
+        }
+    }
+
+    QVector<bool> onMainPath(cellCount(), false);
+    for (int cell = endCell();; cell = parent[cell]) {
+        onMainPath[cell] = true;
+        if (cell == startCell()) {
+            break;
+        }
+    }
+
+    QVector<int> mainPathCells;
+    QVector<int> branchCells;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (cell == startCell() || cell == endCell()) {
+            continue;
+        }
+        (onMainPath[cell] ? mainPathCells : branchCells).append(cell);
+    }
+    std::shuffle(mainPathCells.begin(), mainPathCells.end(), engine);
+    std::shuffle(branchCells.begin(), branchCells.end(), engine);
+
+    const int availableCount = cellCount() - 2;
     coinCount = std::clamp(coinCount, 0, availableCount);
     trapCount = std::clamp(trapCount, 0, availableCount - coinCount);
-    for (int i = 0; i < coinCount; ++i) {
-        resources_[available[i]] = 50;
+
+    const int mainPathTrapCount = std::min(
+        static_cast<int>(mainPathCells.size()), (trapCount + 2) / 3);
+    for (int i = 0; i < mainPathTrapCount; ++i) {
+        resources_[mainPathCells[i]] = -30;
     }
-    for (int i = coinCount; i < coinCount + trapCount; ++i) {
-        resources_[available[i]] = -30;
+
+    QVector<int> remaining;
+    for (int i = mainPathTrapCount; i < mainPathCells.size(); ++i) {
+        remaining.append(mainPathCells[i]);
+    }
+    remaining += branchCells;
+    std::shuffle(remaining.begin(), remaining.end(), engine);
+    for (int i = 0; i < trapCount - mainPathTrapCount; ++i) {
+        resources_[remaining.takeLast()] = -30;
+    }
+
+    QVector<int> coinCandidates;
+    for (int cell : branchCells) {
+        if (resources_[cell] == 0) {
+            coinCandidates.append(cell);
+        }
+    }
+    for (int cell : mainPathCells) {
+        if (resources_[cell] == 0) {
+            coinCandidates.append(cell);
+        }
+    }
+    for (int i = 0; i < coinCount; ++i) {
+        resources_[coinCandidates[i]] = 50;
     }
 }
 
@@ -361,6 +470,58 @@ bool MazeModel::validatePerfect(QString *reason) const {
                   .arg(edgeCount);
     }
     return valid;
+}
+
+MazeStatistics MazeModel::statistics() const {
+    MazeStatistics result;
+    if (cellCount() == 0) {
+        return result;
+    }
+
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> queue;
+    parent[startCell()] = startCell();
+    queue.enqueue(startCell());
+    while (!queue.isEmpty()) {
+        const int current = queue.dequeue();
+        const int degree = neighbors(current).size();
+        if (degree == 1 && current != startCell() && current != endCell()) {
+            ++result.deadEnds;
+        } else if (degree >= 3) {
+            ++result.junctions;
+        }
+        for (int next : neighbors(current)) {
+            if (parent[next] >= 0) {
+                continue;
+            }
+            parent[next] = current;
+            queue.enqueue(next);
+        }
+    }
+
+    for (int cell = endCell(); cell != startCell(); cell = parent[cell]) {
+        ++result.solutionLength;
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (neighbors(cell).size() == 2) {
+            continue;
+        }
+        for (int next : neighbors(cell)) {
+            int length = 1;
+            int previous = cell;
+            int current = next;
+            while (neighbors(current).size() == 2) {
+                const QVector<int> adjacent = neighbors(current);
+                const int following = adjacent[0] == previous ? adjacent[1] : adjacent[0];
+                previous = current;
+                current = following;
+                ++length;
+            }
+            result.longestCorridor = std::max(result.longestCorridor, length);
+        }
+    }
+    return result;
 }
 
 ResourcePlan MazeModel::optimalResourceWalk() const {
@@ -492,6 +653,13 @@ QJsonObject MazeModel::toJson() const {
     object.insert(QStringLiteral("startCell"), startCell());
     object.insert(QStringLiteral("endCell"), endCell());
     object.insert(QStringLiteral("bossAtCell"), endCell());
+    const MazeStatistics stats = statistics();
+    QJsonObject statisticsObject;
+    statisticsObject.insert(QStringLiteral("solutionLength"), stats.solutionLength);
+    statisticsObject.insert(QStringLiteral("deadEnds"), stats.deadEnds);
+    statisticsObject.insert(QStringLiteral("junctions"), stats.junctions);
+    statisticsObject.insert(QStringLiteral("longestCorridor"), stats.longestCorridor);
+    object.insert(QStringLiteral("statistics"), statisticsObject);
 
     QJsonArray gridArray;
     for (const QString &line : expandedGrid()) {

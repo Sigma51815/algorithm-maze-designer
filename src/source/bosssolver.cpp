@@ -42,6 +42,35 @@ void applySkill(QVector<int> &health,
     cooldowns[skillIndex] = skills[skillIndex].cooldown;
 }
 
+int optimisticTurnLowerBound(int remainingHealth,
+                             const QVector<BossSkill> &skills,
+                             const QVector<int> &cooldowns,
+                             int maxTurns) {
+    int maxDamage = 0;
+    for (const BossSkill &skill : skills) {
+        maxDamage = std::max(maxDamage, skill.damage);
+    }
+    const int simpleBound = (remainingHealth + maxDamage - 1) / maxDamage;
+    for (int turns = simpleBound; turns <= maxTurns; ++turns) {
+        qint64 damageCapacity = 0;
+        for (int i = 0; i < skills.size(); ++i) {
+            const int firstAvailableTurn = cooldowns[i];
+            if (turns <= firstAvailableTurn) {
+                continue;
+            }
+            const int usableTurns = turns - firstAvailableTurn;
+            const int maximumUses = 1 + (usableTurns - 1) / (skills[i].cooldown + 1);
+            damageCapacity += static_cast<qint64>(maximumUses) * skills[i].damage;
+        }
+        damageCapacity = std::min<qint64>(damageCapacity,
+                                          static_cast<qint64>(turns) * maxDamage);
+        if (damageCapacity >= remainingHealth) {
+            return turns;
+        }
+    }
+    return maxTurns + 1;
+}
+
 } // namespace
 
 BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossSkill> &skills) {
@@ -51,13 +80,11 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossS
         return result;
     }
 
-    int maxDamage = 0;
     bool hasAlwaysAvailableSkill = false;
     for (const BossSkill &skill : skills) {
         if (skill.damage <= 0 || skill.cooldown < 0) {
             return result;
         }
-        maxDamage = std::max(maxDamage, skill.damage);
         hasAlwaysAvailableSkill = hasAlwaysAvailableSkill || skill.cooldown == 0;
     }
     if (skills.isEmpty() || !hasAlwaysAvailableSkill) {
@@ -106,7 +133,8 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossS
             for (int value : health) {
                 remainingHealth += std::max(0, value);
             }
-            const int optimisticTurns = (remainingHealth + maxDamage - 1) / maxDamage;
+            const int optimisticTurns = optimisticTurnLowerBound(
+                remainingHealth, skills, cooldowns, bestTurns - depth - 1);
             if (depth + optimisticTurns >= bestTurns) {
                 ++result.prunedStates;
                 return;

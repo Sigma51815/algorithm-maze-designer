@@ -12,6 +12,7 @@
 #include <QTimer>
 
 #include <cstring>
+#include <limits>
 
 namespace {
 
@@ -58,6 +59,106 @@ int longestInternalWallRun(const MazeModel &maze) {
         measure(vertical);
     }
     return longest;
+}
+
+int bruteForceResourceMaximum(const MazeModel &maze) {
+    const int count = maze.cellCount();
+    if (count > 20) {
+        return 0;
+    }
+    const quint64 startBit = quint64{1} << maze.startCell();
+    const quint64 endBit = quint64{1} << maze.endCell();
+    int best = std::numeric_limits<int>::min();
+    for (quint64 mask = 0; mask < (quint64{1} << count); ++mask) {
+        if ((mask & startBit) == 0 || (mask & endBit) == 0) {
+            continue;
+        }
+        QQueue<int> queue;
+        QSet<int> reached;
+        queue.enqueue(maze.startCell());
+        reached.insert(maze.startCell());
+        while (!queue.isEmpty()) {
+            const int current = queue.dequeue();
+            for (int next : maze.neighbors(current)) {
+                if ((mask & (quint64{1} << next)) != 0 && !reached.contains(next)) {
+                    reached.insert(next);
+                    queue.enqueue(next);
+                }
+            }
+        }
+        int selectedCount = 0;
+        for (quint64 bits = mask; bits != 0; bits >>= 1) {
+            selectedCount += static_cast<int>(bits & 1U);
+        }
+        if (reached.size() != selectedCount) {
+            continue;
+        }
+        int value = 0;
+        for (int cell : reached) {
+            if (cell != maze.startCell() && cell != maze.endCell()) {
+                value += maze.resourceAt(cell);
+            }
+        }
+        best = std::max(best, value);
+    }
+    return best;
+}
+
+int bruteForceBossTurns(const QVector<int> &initialHealth,
+                        const QVector<BossSkill> &skills) {
+    struct State {
+        QVector<int> health;
+        QVector<int> cooldowns;
+        int turns = 0;
+    };
+    auto keyOf = [](const State &state) {
+        QString key;
+        for (int value : state.health) {
+            key += QString::number(std::max(0, value)) + QLatin1Char(',');
+        }
+        key += QLatin1Char('|');
+        for (int value : state.cooldowns) {
+            key += QString::number(value) + QLatin1Char(',');
+        }
+        return key;
+    };
+    auto firstLiving = [](const QVector<int> &health) {
+        for (int i = 0; i < health.size(); ++i) {
+            if (health[i] > 0) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    QQueue<State> queue;
+    QSet<QString> visited;
+    queue.enqueue({initialHealth, QVector<int>(skills.size(), 0), 0});
+    while (!queue.isEmpty()) {
+        State state = queue.dequeue();
+        const int boss = firstLiving(state.health);
+        if (boss < 0) {
+            return state.turns;
+        }
+        for (int skillIndex = 0; skillIndex < skills.size(); ++skillIndex) {
+            if (state.cooldowns[skillIndex] > 0) {
+                continue;
+            }
+            State next = state;
+            next.health[boss] -= skills[skillIndex].damage;
+            for (int &cooldown : next.cooldowns) {
+                cooldown = std::max(0, cooldown - 1);
+            }
+            next.cooldowns[skillIndex] = skills[skillIndex].cooldown;
+            ++next.turns;
+            const QString key = keyOf(next);
+            if (!visited.contains(key)) {
+                visited.insert(key);
+                queue.enqueue(std::move(next));
+            }
+        }
+    }
+    return -1;
 }
 
 int runSelfTests() {
@@ -107,6 +208,21 @@ int runSelfTests() {
                << ", resource=" << plan.maxValue << '\n';
     }
 
+    for (int i = 0; i < algorithms.size(); ++i) {
+        MazeModel maze;
+        maze.generate(4, 4, algorithms[i], static_cast<quint32>(3000 + i));
+        maze.placeResources(5, 5, static_cast<quint32>(4000 + i));
+        const ResourcePlan plan = maze.optimalResourceWalk();
+        const int bruteForceValue = bruteForceResourceMaximum(maze);
+        if (plan.maxValue != bruteForceValue) {
+            output << "FAIL DP optimality for algorithm " << i
+                   << ": dp=" << plan.maxValue << ", brute=" << bruteForceValue << '\n';
+            return 7;
+        }
+        output << "PASS DP optimality algorithm " << i
+               << ": value=" << plan.maxValue << '\n';
+    }
+
     const int directDistance = 15 + 15 - 2;
     for (quint32 seed : {202506U, 7U, 42U, 1003U, 65537U}) {
         MazeModel maze;
@@ -136,6 +252,17 @@ int runSelfTests() {
         output << "FAIL boss solver\n";
         return 5;
     }
+    const QVector<int> smallBosses{12, 15};
+    const QVector<BossSkill> smallSkills{{QStringLiteral("Normal"), 3, 0},
+                                         {QStringLiteral("Burst"), 7, 2}};
+    const BossResult smallResult = BossSolver::solve(smallBosses, smallSkills);
+    const int bruteForceTurns = bruteForceBossTurns(smallBosses, smallSkills);
+    if (!smallResult.solved || smallResult.minimumTurns != bruteForceTurns) {
+        output << "FAIL boss optimality: branch-bound=" << smallResult.minimumTurns
+               << ", bfs=" << bruteForceTurns << '\n';
+        return 8;
+    }
+    output << "PASS boss optimality: turns=" << bruteForceTurns << '\n';
     output << "PASS boss solver: turns=" << bossResult.minimumTurns
            << ", expanded=" << bossResult.expandedStates
            << ", pruned=" << bossResult.prunedStates << '\n';

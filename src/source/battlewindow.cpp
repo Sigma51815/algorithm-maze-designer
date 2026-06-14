@@ -62,7 +62,7 @@ void BattleScene::setBattleState(int bossIndex,
     maximumHealth_ = maximumHealth;
     turn_ = turn;
     turnLimit_ = turnLimit;
-    coins_ = coins;
+    reviveCost_ = coins;
     update();
 }
 
@@ -96,6 +96,9 @@ void BattleScene::setAttackProgress(qreal progress) {
 void BattleScene::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    QFont baseFont(QStringLiteral("Microsoft YaHei"));
+    baseFont.setPixelSize(15);
+    painter.setFont(baseFont);
     const QRectF area = rect();
 
     QLinearGradient sky(0, 0, 0, height());
@@ -202,8 +205,8 @@ void BattleScene::paintEvent(QPaintEvent *) {
     }
 
     if (hitFlash) {
-        QFont damageFont = painter.font();
-        damageFont.setPixelSize(34);
+    QFont damageFont(QStringLiteral("Microsoft YaHei"));
+    damageFont.setPixelSize(34);
         damageFont.setBold(true);
         painter.setFont(damageFont);
         painter.setPen(QColor("#fff6d5"));
@@ -216,7 +219,7 @@ void BattleScene::paintEvent(QPaintEvent *) {
     painter.drawRoundedRect(QRectF(24, 20, 300, 82), 14, 14);
     painter.drawRoundedRect(QRectF(width() - 374, 20, 350, 82), 14, 14);
     painter.setPen(QColor("#203345"));
-    QFont infoFont = painter.font();
+    QFont infoFont(QStringLiteral("Microsoft YaHei"));
     infoFont.setBold(true);
     infoFont.setPixelSize(18);
     painter.setFont(infoFont);
@@ -232,10 +235,10 @@ void BattleScene::paintEvent(QPaintEvent *) {
                      QStringLiteral("%1/%2").arg(std::max(0, health_)).arg(maximumHealth_));
     painter.setPen(QColor("#36566d"));
     painter.drawText(QRectF(42, 59, 260, 28),
-                     QStringLiteral("回合 %1/%2   金币 %3")
+                     QStringLiteral("回合 %1/%2   复活费 %3 金币")
                          .arg(turn_)
                          .arg(turnLimit_)
-                         .arg(coins_));
+                         .arg(reviveCost_));
 }
 
 BattleWindow::BattleWindow(const QVector<int> &bossHealth,
@@ -307,6 +310,7 @@ void BattleWindow::buildUi() {
     setCentralWidget(central);
     setStyleSheet(QStringLiteral(
         "QMainWindow{background:#183145;}"
+        "*{font-family:'Microsoft YaHei','Microsoft JhengHei','SimHei';}"
         "#dialogBox{background:rgba(255,255,255,235); border:3px solid #4e6e86;"
         " border-radius:12px;}"
         "#dialogBox QLabel{color:#21384a; font-size:15px;}"
@@ -334,7 +338,13 @@ void BattleWindow::resetBattle() {
     turn_ = 0;
     autoStep_ = 0;
     animating_ = false;
-    messageLabel_->setText(QStringLiteral("迷宫守卫出现了！请选择技能，或播放算法求出的最优序列。"));
+    QStringList sequence;
+    for (int skillIndex : optimalResult_.skillSequence) {
+        sequence.append(skills_[skillIndex].name);
+    }
+    messageLabel_->setText(
+        QStringLiteral("迷宫守卫出现了！最优序列：%1")
+            .arg(sequence.join(QStringLiteral(" → "))));
     refreshUi();
 }
 
@@ -430,10 +440,13 @@ void BattleWindow::refreshUi() {
     const int maximum = initialHealth_.isEmpty() ? 1 : initialHealth_[currentBoss_];
     scene_->setBattleState(currentBoss_, initialHealth_.size(), health, maximum, turn_,
                            turnLimit_, reviveCoins_);
-    roundLabel_->setText(QStringLiteral("最优回合：%1    当前回合：%2    限定回合：%3")
+    roundLabel_->setText(QStringLiteral(
+                             "最优回合：%1    当前回合：%2    限定回合：%3    搜索/剪枝：%4/%5")
                              .arg(optimalResult_.minimumTurns)
                              .arg(turn_)
-                             .arg(turnLimit_));
+                             .arg(turnLimit_)
+                             .arg(optimalResult_.expandedStates)
+                             .arg(optimalResult_.prunedStates));
     if (modeLabel_->text().isEmpty()) {
         modeLabel_->setText(QStringLiteral("模式：手动选择技能"));
     }

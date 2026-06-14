@@ -42,7 +42,7 @@ private:
     int maximumHealth_ = 1;
     int turn_ = 0;
     int turnLimit_ = 1;
-    int coins_ = 0;
+    int reviveCost_ = 0;
     int damage_ = 0;
     BossSkill activeSkill_;
     qreal attackProgress_ = 0.0;

@@ -56,7 +56,7 @@ void MainWindow::buildUi() {
     panelLayout->addWidget(title);
 
     auto *legend = new QLabel(QStringLiteral(
-        "S 起点  E 终点/BOSS  ● 金币(+50)  ▲ 陷阱(-30)\n"
+        "S 起点  E 终点/BOSS（自动选择迷宫直径两端）  ● 金币(+50)  ▲ 陷阱(-30)\n"
         "蓝线为动态规划得到的最优资源收集行走路径。"));
     legend->setWordWrap(true);
     legend->setStyleSheet(QStringLiteral("color:#52616b;"));
@@ -69,7 +69,7 @@ void MainWindow::buildUi() {
     algorithmBox_->addItems({QStringLiteral("分治"),
                              QStringLiteral("贪心 / Kruskal 最小生成树"),
                              QStringLiteral("回溯 / DFS"),
-                             QStringLiteral("分支限界 / 随机代价 BFS")});
+                             QStringLiteral("分支限界 / 严格分层 BFS")});
     rowsSpin_ = new QSpinBox;
     rowsSpin_->setRange(5, 31);
     rowsSpin_->setValue(15);
@@ -107,7 +107,7 @@ void MainWindow::buildUi() {
         QStringLiteral("分治：递归拆分矩形区域，每次只连接两个子迷宫一次。时间 O(V)，递归空间 O(log V)（均衡时），结构分区明显。"),
         QStringLiteral("Kruskal MST：随机边排序并用并查集防环。时间 O(E log E)，空间 O(V+E)，分支较均衡。"),
         QStringLiteral("回溯 DFS：深入未访问邻格，遇到死路回退。时间 O(V+E)，空间 O(V)，长走廊较多。"),
-        QStringLiteral("BFS 分支限界：优先队列按深度下界扩展，每次只接受一条候选边；随机代价打散同层分支，visited 剪去重复与成环状态。时间 O(E log E)，空间 O(E)，形态更接近标准迷宫。")};
+        QStringLiteral("BFS 分支限界：候选迷宫严格按深度层扩展，随机代价只打散同层分支，visited 剪去重复与成环状态；固定次数随机重启后选取解路径更长的迷宫。时间 O(E log E)，空间 O(E)。")};
     auto updateComplexity = [=](int index) {
         complexityLabel->setText(complexityDescriptions.value(index));
     };
@@ -377,7 +377,14 @@ void MainWindow::showBattleAnimation() {
 void MainWindow::updateValidation() {
     QString reason;
     const bool valid = maze_.validatePerfect(&reason);
-    validationLabel_->setText(reason);
+    const MazeStatistics stats = maze_.statistics();
+    validationLabel_->setText(
+        QStringLiteral("%1\n挑战性：解路径 %2 步，死路 %3，分叉点 %4，最长走廊 %5")
+            .arg(reason)
+            .arg(stats.solutionLength)
+            .arg(stats.deadEnds)
+            .arg(stats.junctions)
+            .arg(stats.longestCorridor));
     validationLabel_->setStyleSheet(valid ? QStringLiteral("color:#167143;")
                                           : QStringLiteral("color:#b13232;"));
 }

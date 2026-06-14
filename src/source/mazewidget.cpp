@@ -83,17 +83,20 @@ void MazeWidget::paintEvent(QPaintEvent *) {
         return QPointF(originX + (column + 0.5) * cellSize,
                        originY + (row + 0.5) * cellSize);
     };
+    auto rectOf = [&](int cell) {
+        const int row = cell / maze_.columns();
+        const int column = cell % maze_.columns();
+        return QRectF(originX + column * cellSize, originY + row * cellSize,
+                      cellSize, cellSize);
+    };
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
     painter.drawRoundedRect(QRectF(originX, originY, boardWidth, boardHeight), 4, 4);
     painter.setBrush(QColor("#dff4e8"));
-    painter.drawRect(QRectF(originX, originY, cellSize, cellSize));
+    painter.drawRect(rectOf(maze_.startCell()));
     painter.setBrush(QColor("#fde7e7"));
-    painter.drawRect(QRectF(originX + (maze_.columns() - 1) * cellSize,
-                            originY + (maze_.rows() - 1) * cellSize,
-                            cellSize,
-                            cellSize));
+    painter.drawRect(rectOf(maze_.endCell()));
 
     if (visiblePathPoints_ > 1) {
         QPainterPath path(centerOf(solutionPath_[0]));
@@ -159,12 +162,7 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     labelFont.setPixelSize(std::max(8, static_cast<int>(cellSize * 0.38)));
     painter.setFont(labelFont);
     painter.setPen(QColor("#17613a"));
-    painter.drawText(QRectF(originX, originY, cellSize, cellSize),
-                     Qt::AlignCenter, QStringLiteral("S"));
+    painter.drawText(rectOf(maze_.startCell()), Qt::AlignCenter, QStringLiteral("S"));
     painter.setPen(QColor("#9a2630"));
-    painter.drawText(QRectF(originX + (maze_.columns() - 1) * cellSize,
-                            originY + (maze_.rows() - 1) * cellSize,
-                            cellSize,
-                            cellSize),
-                     Qt::AlignCenter, QStringLiteral("E"));
+    painter.drawText(rectOf(maze_.endCell()), Qt::AlignCenter, QStringLiteral("E"));
 }
