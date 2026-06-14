@@ -1,7 +1,7 @@
 #pragma once
 
-#include "bosssolver.h"
-#include "maze.h"
+#include "core/bosssolver.h"
+#include "core/maze.h"
 
 #include <QMainWindow>
 

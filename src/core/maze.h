@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/bosssolver.h"
+
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -44,6 +46,11 @@ public:
     [[nodiscard]] ResourcePlan optimalResourceWalk() const;
     [[nodiscard]] QStringList expandedGrid() const;
     [[nodiscard]] QJsonObject toJson() const;
+    [[nodiscard]] QStringList compactGrid() const;
+    [[nodiscard]] QJsonObject toCrossTestJson(const QVector<int> &bossHealth,
+                                              const QVector<BossSkill> &skills,
+                                              int minRounds,
+                                              int coinConsumption) const;
 
 private:
     static constexpr int Up = 0;

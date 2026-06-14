@@ -1,4 +1,4 @@
-#include "mazewidget.h"
+#include "gui/mazewidget.h"
 
 #include <QPainter>
 #include <QPainterPath>

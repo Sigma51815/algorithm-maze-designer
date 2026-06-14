@@ -1,6 +1,6 @@
 #pragma once
 
-#include "maze.h"
+#include "core/maze.h"
 
 #include <QWidget>
 

@@ -1,4 +1,4 @@
-#include "maze.h"
+#include "core/maze.h"
 
 #include <QJsonArray>
 #include <QQueue>
@@ -484,5 +484,74 @@ QJsonObject MazeModel::toJson() const {
         resourceArray.append(resource);
     }
     object.insert(QStringLiteral("resources"), resourceArray);
+    return object;
+}
+
+QStringList MazeModel::compactGrid() const {
+    const int gridRows = rows_ * 2 + 1;
+    const int gridCols = columns_ * 2 + 1;
+    QStringList grid;
+    for (int r = 0; r < gridRows; ++r) {
+        grid.append(QString(gridCols, QLatin1Char('#')));
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        const int gr = rowOf(cell) * 2 + 1;
+        const int gc = columnOf(cell) * 2 + 1;
+        QChar marker = QLatin1Char(' ');
+        if (cell == startCell()) {
+            marker = QLatin1Char('S');
+        } else if (cell == endCell()) {
+            marker = QLatin1Char('E');
+        } else if (resourceAt(cell) > 0) {
+            marker = QLatin1Char('G');
+        } else if (resourceAt(cell) < 0) {
+            marker = QLatin1Char('T');
+        }
+        grid[gr][gc] = marker;
+
+        if (passages_[cell][Right] && columnOf(cell) + 1 < columns_) {
+            grid[gr][gc + 1] = QLatin1Char(' ');
+        }
+        if (passages_[cell][Down] && rowOf(cell) + 1 < rows_) {
+            grid[gr + 1][gc] = QLatin1Char(' ');
+        }
+    }
+    return grid;
+}
+
+QJsonObject MazeModel::toCrossTestJson(const QVector<int> &bossHealth,
+                                       const QVector<BossSkill> &skills,
+                                       int minRounds,
+                                       int coinConsumption) const {
+    QJsonObject object;
+
+    QJsonArray mazeArray;
+    for (const QString &line : compactGrid()) {
+        QJsonArray row;
+        for (int i = 0; i < line.size(); ++i) {
+            row.append(QString(line[i]));
+        }
+        mazeArray.append(row);
+    }
+    object.insert(QStringLiteral("maze"), mazeArray);
+
+    QJsonArray bossArray;
+    for (int health : bossHealth) {
+        bossArray.append(health);
+    }
+    object.insert(QStringLiteral("B"), bossArray);
+
+    QJsonArray skillsArray;
+    for (const BossSkill &skill : skills) {
+        QJsonArray pair;
+        pair.append(skill.damage);
+        pair.append(skill.cooldown);
+        skillsArray.append(pair);
+    }
+    object.insert(QStringLiteral("PlayerSkills"), skillsArray);
+
+    object.insert(QStringLiteral("minRouds"), minRounds);
+    object.insert(QStringLiteral("CoinConsumption"), coinConsumption);
     return object;
 }

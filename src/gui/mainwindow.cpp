@@ -1,6 +1,6 @@
-#include "mainwindow.h"
+#include "gui/mainwindow.h"
 
-#include "mazewidget.h"
+#include "gui/mazewidget.h"
 
 #include <QComboBox>
 #include <QFileDialog>
@@ -360,12 +360,19 @@ void MainWindow::exportMaze() {
         return;
     }
 
-    QJsonObject root = maze_.toJson();
-    root.insert(QStringLiteral("generator"), algorithmBox_->currentText());
-    root.insert(QStringLiteral("seed"), seedSpin_->value());
-    QString validation;
-    root.insert(QStringLiteral("perfectMaze"), maze_.validatePerfect(&validation));
-    root.insert(QStringLiteral("validation"), validation);
+    bool healthOk = false;
+    bool skillsOk = false;
+    const QVector<int> health = parseBossHealth(&healthOk);
+    const QVector<BossSkill> skills = parseSkills(&skillsOk);
+
+    const int minRounds = lastBossResult_.solved
+        ? lastBossResult_.minimumTurns + extraTurnsSpin_->value()
+        : extraTurnsSpin_->value();
+    QJsonObject root = maze_.toCrossTestJson(
+        healthOk ? health : QVector<int>{},
+        skillsOk ? skills : QVector<BossSkill>{},
+        minRounds,
+        reviveCostSpin_->value());
 
     if (!lastPlan_.walk.isEmpty()) {
         QJsonObject plan;
@@ -378,38 +385,12 @@ void MainWindow::exportMaze() {
         root.insert(QStringLiteral("dynamicProgrammingPlan"), plan);
     }
 
-    bool healthOk = false;
-    bool skillsOk = false;
-    const QVector<int> health = parseBossHealth(&healthOk);
-    const QVector<BossSkill> skills = parseSkills(&skillsOk);
-    if (healthOk && skillsOk) {
-        QJsonObject battle;
-        QJsonArray bosses;
-        for (int value : health) {
-            bosses.append(value);
+    if (lastBossResult_.solved && healthOk && skillsOk) {
+        QJsonArray sequence;
+        for (int skillIndex : lastBossResult_.skillSequence) {
+            sequence.append(skills[skillIndex].name);
         }
-        battle.insert(QStringLiteral("bossHealth"), bosses);
-        QJsonArray skillArray;
-        for (const BossSkill &skill : skills) {
-            QJsonObject item;
-            item.insert(QStringLiteral("name"), skill.name);
-            item.insert(QStringLiteral("damage"), skill.damage);
-            item.insert(QStringLiteral("cooldown"), skill.cooldown);
-            skillArray.append(item);
-        }
-        battle.insert(QStringLiteral("skills"), skillArray);
-        battle.insert(QStringLiteral("reviveCoins"), reviveCostSpin_->value());
-        if (lastBossResult_.solved) {
-            battle.insert(QStringLiteral("minimumTurns"), lastBossResult_.minimumTurns);
-            battle.insert(QStringLiteral("turnLimit"),
-                          lastBossResult_.minimumTurns + extraTurnsSpin_->value());
-            QJsonArray sequence;
-            for (int skillIndex : lastBossResult_.skillSequence) {
-                sequence.append(skills[skillIndex].name);
-            }
-            battle.insert(QStringLiteral("optimalSkillSequence"), sequence);
-        }
-        root.insert(QStringLiteral("bossBattle"), battle);
+        root.insert(QStringLiteral("optimalSkillSequence"), sequence);
     }
 
     QSaveFile file(path);

@@ -1,6 +1,6 @@
-#include "bosssolver.h"
-#include "mainwindow.h"
-#include "maze.h"
+#include "core/bosssolver.h"
+#include "core/maze.h"
+#include "gui/mainwindow.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -55,6 +55,35 @@ int runSelfTests() {
         }
         output << "PASS maze algorithm " << i << ": " << reason
                << ", resource=" << plan.maxValue << '\n';
+    }
+
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 42);
+        maze.placeResources(10, 5, 43);
+        const QStringList grid = maze.compactGrid();
+        if (grid.size() != 31) {
+            output << "FAIL compactGrid row count: " << grid.size() << '\n';
+            return 6;
+        }
+        for (const QString &row : grid) {
+            if (row.size() != 31) {
+                output << "FAIL compactGrid col count: " << row.size() << '\n';
+                return 6;
+            }
+        }
+        const QVector<BossSkill> testSkills{{QStringLiteral("Normal"), 5, 0},
+                                             {QStringLiteral("Heavy"), 10, 2}};
+        const QJsonObject crossJson = maze.toCrossTestJson({35, 45}, testSkills, 20, 100);
+        if (!crossJson.contains(QStringLiteral("maze"))
+            || !crossJson.contains(QStringLiteral("B"))
+            || !crossJson.contains(QStringLiteral("PlayerSkills"))
+            || !crossJson.contains(QStringLiteral("minRouds"))
+            || !crossJson.contains(QStringLiteral("CoinConsumption"))) {
+            output << "FAIL cross-test JSON missing fields\n";
+            return 7;
+        }
+        output << "PASS cross-test JSON format\n";
     }
 
     const QVector<int> bosses{35, 45, 60};
