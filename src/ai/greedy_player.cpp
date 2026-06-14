@@ -84,7 +84,10 @@ QVector<int> GreedyPlayer::bfsPath(const MazeModel &maze, int from, int to) {
     return {};
 }
 
-PlayResult GreedyPlayer::play(MazeModel &maze) {
+PlayResult GreedyPlayer::play(MazeModel &maze,
+                              const QVector<int> &bossHealth,
+                              const QVector<BossSkill> &skills,
+                              int reviveCost) {
     PlayResult result;
     const int totalCells = maze.cellCount();
     const int endCell = maze.endCell();
@@ -94,6 +97,7 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
     int collectedCoins = 0;
     int triggeredTraps = 0;
     int steps = 0;
+    bool bossFought = false;
     result.path.append(pos);
 
     while (pos != endCell) {
@@ -145,6 +149,23 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
                 ++triggeredTraps;
             }
             maze.consumeResource(pos);
+        }
+
+        if (pos == maze.bossCell() && maze.hasBoss() && !bossFought && !bossHealth.isEmpty()) {
+            bossFought = true;
+            BossResult bossResult = BossSolver::solve(bossHealth, skills);
+            if (bossResult.solved) {
+                result.bossDefeated = true;
+                result.bossAttempts = 1;
+            } else {
+                result.bossAttempts = 1;
+                if (resource >= reviveCost) {
+                    resource -= reviveCost;
+                    result.bossDefeated = true;
+                } else {
+                    break;
+                }
+            }
         }
 
         result.path.append(pos);

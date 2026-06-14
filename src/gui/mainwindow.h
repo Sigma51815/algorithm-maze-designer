@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ai/greedy_player.h"
 #include "core/bosssolver.h"
 #include "core/maze.h"
 
@@ -43,12 +44,16 @@ private:
     QTimer *pathTimer_ = nullptr;
     int revealedEdges_ = 0;
     int revealedPathPoints_ = 0;
+    PlayResult lastAiResult_;
+    QTimer *aiPathTimer_ = nullptr;
+    int revealedAiPoints_ = 0;
 
     void buildUi();
     void generateMaze();
     void placeResources();
     void solveResources();
     void solveBossBattle();
+    void runAiPlayer();
     void exportMaze();
     void updateValidation();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;

@@ -196,6 +196,52 @@ int runSelfTests() {
                                     bestName.toUtf8().constData(), bestScore, bestSteps);
     }
 
+    {
+        MazeModel bigMaze;
+        bigMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        bigMaze.placeResources(28, 18, static_cast<quint32>(43));
+
+        int totalValue = 0;
+        int totalSteps = 0;
+        int caseCount = 0;
+        const QVector<int> testCells{38, 56, 112, 168, 196};
+        for (int cell : testCells) {
+            if (cell >= bigMaze.cellCount()) continue;
+            MazeModel sub = bigMaze.extractSubArea(cell);
+            if (sub.cellCount() == 0) continue;
+            PlayResult result = GreedyPlayer::play(sub);
+            totalValue += result.remainingResource;
+            totalSteps += result.totalSteps;
+            ++caseCount;
+        }
+        if (caseCount == 0) {
+            output << "FAIL 3x3 local test: no valid cases\n";
+            return 10;
+        }
+        const double avgPerStep = totalSteps > 0 ? static_cast<double>(totalValue) / totalSteps : 0.0;
+        output << QString::asprintf("PASS 3x3 local test (%d cases, avg_value_per_step=%.2f)\n",
+                                    caseCount, avgPerStep);
+    }
+
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        maze.placeResources(28, 18, static_cast<quint32>(42));
+
+        const QVector<int> bossHealth{35, 45};
+        const QVector<BossSkill> bossSkills{{QStringLiteral("Normal"), 5, 0},
+                                             {QStringLiteral("Heavy"), 10, 2},
+                                             {QStringLiteral("Ultimate"), 18, 4}};
+        PlayResult result = GreedyPlayer::play(maze, bossHealth, bossSkills, 100);
+        if (!result.reachedEnd) {
+            output << "FAIL BOSS battle: did not reach end\n";
+            return 11;
+        }
+        output << QString::asprintf("PASS BOSS battle (defeated=%s, attempts=%d, score=%.2f)\n",
+                                    result.bossDefeated ? "true" : "false",
+                                    result.bossAttempts, result.score);
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }

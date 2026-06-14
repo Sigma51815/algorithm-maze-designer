@@ -1,5 +1,6 @@
 #include "gui/mainwindow.h"
 
+#include "ai/greedy_player.h"
 #include "gui/mazewidget.h"
 
 #include <QComboBox>
@@ -167,6 +168,16 @@ void MainWindow::buildUi() {
     panelLayout->addWidget(bossGroup);
     connect(solveBossButton, &QPushButton::clicked, this, &MainWindow::solveBossBattle);
 
+    auto *aiGroup = new QGroupBox(QStringLiteral("AI 玩家探险"));
+    auto *aiLayout = new QVBoxLayout(aiGroup);
+    auto *aiButton = new QPushButton(QStringLiteral("运行贪心 AI 玩家"));
+    aiLayout->addWidget(aiButton);
+    auto *aiResultLabel = new QLabel(QStringLiteral("尚未运行"));
+    aiResultLabel->setWordWrap(true);
+    aiLayout->addWidget(aiResultLabel);
+    panelLayout->addWidget(aiGroup);
+    connect(aiButton, &QPushButton::clicked, this, &MainWindow::runAiPlayer);
+
     auto *exportButton = new QPushButton(QStringLiteral("导出当前迷宫与算法结果（JSON）"));
     panelLayout->addWidget(exportButton);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::exportMaze);
@@ -197,6 +208,16 @@ void MainWindow::buildUi() {
         }
     });
 
+    aiPathTimer_ = new QTimer(this);
+    aiPathTimer_->setInterval(24);
+    connect(aiPathTimer_, &QTimer::timeout, this, [this] {
+        ++revealedAiPoints_;
+        mazeWidget_->setAiPath(lastAiResult_.path, revealedAiPoints_);
+        if (revealedAiPoints_ >= lastAiResult_.path.size()) {
+            aiPathTimer_->stop();
+        }
+    });
+
     setStyleSheet(QStringLiteral(
         "QMainWindow{background:#f4f7f8;}"
         "QGroupBox{font-weight:600; border:1px solid #cfdadd; border-radius:7px;"
@@ -209,6 +230,7 @@ void MainWindow::buildUi() {
 void MainWindow::generateMaze() {
     generationTimer_->stop();
     pathTimer_->stop();
+    mazeWidget_->clearAiPath();
     const auto algorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
     maze_.generate(rowsSpin_->value(), columnsSpin_->value(), algorithm,
                    static_cast<quint32>(seedSpin_->value()));
@@ -401,4 +423,29 @@ void MainWindow::exportMaze() {
         return;
     }
     statusBar()->showMessage(QStringLiteral("已导出：%1").arg(path), 5000);
+}
+
+void MainWindow::runAiPlayer() {
+    if (maze_.cellCount() == 0) return;
+
+    aiPathTimer_->stop();
+    generationTimer_->stop();
+    pathTimer_->stop();
+    mazeWidget_->setRevealCount(maze_.generationSteps().size());
+    mazeWidget_->clearSolutionPath();
+
+    lastAiResult_ = GreedyPlayer::play(maze_);
+
+    statusBar()->showMessage(
+        QStringLiteral("AI: score=%.2f, steps=%d, coins=%d, traps=%d, end=%1")
+            .arg(lastAiResult_.score, 0, 'f', 2)
+            .arg(lastAiResult_.totalSteps)
+            .arg(lastAiResult_.collectedCoins)
+            .arg(lastAiResult_.triggeredTraps)
+            .arg(lastAiResult_.reachedEnd ? QStringLiteral("reached") : QStringLiteral("stuck")),
+        10000);
+
+    revealedAiPoints_ = 1;
+    mazeWidget_->setAiPath(lastAiResult_.path, revealedAiPoints_);
+    aiPathTimer_->start();
 }

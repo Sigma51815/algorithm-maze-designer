@@ -55,6 +55,7 @@ public:
                                               const QVector<BossSkill> &skills,
                                               int minRounds,
                                               int coinConsumption) const;
+    [[nodiscard]] MazeModel extractSubArea(int centerCell) const;
 
 private:
     static constexpr int Up = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/maze.h"
+#include "core/bosssolver.h"
 
 #include <QVector>
 
@@ -12,11 +13,16 @@ struct PlayResult {
     int totalSteps = 0;
     QVector<int> path;
     bool reachedEnd = false;
+    bool bossDefeated = false;
+    int bossAttempts = 0;
 };
 
 class GreedyPlayer {
 public:
-    static PlayResult play(MazeModel &maze);
+    static PlayResult play(MazeModel &maze,
+                           const QVector<int> &bossHealth = {},
+                           const QVector<BossSkill> &skills = {},
+                           int reviveCost = 100);
 
 private:
     static QVector<int> observeVisible(const MazeModel &maze, int pos);

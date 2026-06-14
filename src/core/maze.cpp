@@ -560,6 +560,41 @@ QStringList MazeModel::compactGrid() const {
     return grid;
 }
 
+MazeModel MazeModel::extractSubArea(int centerCell) const {
+    MazeModel sub;
+    const int cr = rowOf(centerCell);
+    const int cc = columnOf(centerCell);
+    sub.rows_ = 3;
+    sub.columns_ = 3;
+    sub.passages_.fill({false, false, false, false}, 9);
+    sub.resources_.fill(0, 9);
+    sub.hasBoss_ = false;
+    sub.bossCell_ = -1;
+
+    auto subIndex = [&](int r, int c) { return (r - cr + 1) * 3 + (c - cc + 1); };
+
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            const int r = cr + dr;
+            const int c = cc + dc;
+            if (r < 0 || r >= rows_ || c < 0 || c >= columns_) continue;
+            const int origCell = index(r, c);
+            const int subCell = subIndex(r, c);
+            sub.resources_[subCell] = resources_[origCell];
+            for (int dir = 0; dir < 4; ++dir) {
+                if (!passages_[origCell][dir]) continue;
+                int nr = r, nc = c;
+                if (dir == 0) --nr; else if (dir == 1) ++nc;
+                else if (dir == 2) ++nr; else --nc;
+                if (nr >= cr - 1 && nr <= cr + 1 && nc >= cc - 1 && nc <= cc + 1) {
+                    sub.passages_[subCell][dir] = true;
+                }
+            }
+        }
+    }
+    return sub;
+}
+
 QJsonObject MazeModel::toCrossTestJson(const QVector<int> &bossHealth,
                                        const QVector<BossSkill> &skills,
                                        int minRounds,
