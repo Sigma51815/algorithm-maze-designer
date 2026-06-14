@@ -15,6 +15,8 @@
 - 导出 JSON：扩展迷宫矩阵、通路、资源、DP 路径和 BOSS 参数。
 - `--self-test` 自动测试四种迷宫、路径合法性和 BOSS 序列。
 
+源码按类型存放：头文件位于 `src/include`，实现文件位于 `src/source`。
+
 ## 编译运行
 
 可直接双击 `dist/maze_designer.exe` 运行已打包成品。修改源码后，双击

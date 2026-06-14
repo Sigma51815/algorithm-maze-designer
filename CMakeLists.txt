@@ -9,17 +9,18 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_executable(maze_designer
-    src/main.cpp
-    src/mainwindow.cpp
-    src/mainwindow.h
-    src/mazewidget.cpp
-    src/mazewidget.h
-    src/maze.cpp
-    src/maze.h
-    src/bosssolver.cpp
-    src/bosssolver.h
+    src/source/main.cpp
+    src/source/mainwindow.cpp
+    src/source/mazewidget.cpp
+    src/source/maze.cpp
+    src/source/bosssolver.cpp
+    src/include/mainwindow.h
+    src/include/mazewidget.h
+    src/include/maze.h
+    src/include/bosssolver.h
 )
 
+target_include_directories(maze_designer PRIVATE src/include)
 target_link_libraries(maze_designer PRIVATE Qt6::Widgets)
 
 if(MINGW)
