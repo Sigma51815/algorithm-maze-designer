@@ -1,3 +1,4 @@
+#include "ai/greedy_player.h"
 #include "core/bosssolver.h"
 #include "core/maze.h"
 #include "gui/mainwindow.h"
@@ -135,6 +136,58 @@ int runSelfTests() {
     output << "PASS boss solver: turns=" << bossResult.minimumTurns
            << ", expanded=" << bossResult.expandedStates
            << ", pruned=" << bossResult.prunedStates << '\n';
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        maze.placeResources(28, 18, static_cast<quint32>(42));
+
+        PlayResult result = GreedyPlayer::play(maze);
+        if (!result.reachedEnd || result.totalSteps <= 0 || result.score <= 0) {
+            output << "FAIL greedy AI\n";
+            return 8;
+        }
+        output << QString::asprintf("PASS greedy AI (score=%.2f, steps=%d, resource=%d)\n",
+                                    result.score, result.totalSteps, result.remainingResource);
+    }
+
+    {
+        auto algoName = [](MazeAlgorithm a) -> QString {
+            switch (a) {
+            case MazeAlgorithm::DivideAndConquer:  return QStringLiteral("DivideAndConquer");
+            case MazeAlgorithm::KruskalMst:        return QStringLiteral("KruskalMst");
+            case MazeAlgorithm::DepthFirstSearch:  return QStringLiteral("DepthFirstSearch");
+            case MazeAlgorithm::BreadthFirstSearch: return QStringLiteral("BreadthFirstSearch");
+            }
+            return QStringLiteral("Unknown");
+        };
+
+        const QVector<MazeAlgorithm> algos{
+            MazeAlgorithm::DivideAndConquer,
+            MazeAlgorithm::KruskalMst,
+            MazeAlgorithm::DepthFirstSearch,
+            MazeAlgorithm::BreadthFirstSearch};
+
+        float bestScore = 1e9f;
+        QString bestName;
+        for (int i = 0; i < algos.size(); ++i) {
+            MazeModel maze;
+            maze.generate(15, 15, algos[i], static_cast<quint32>(100 + i));
+            maze.placeResources(28, 18, static_cast<quint32>(100 + i));
+
+            PlayResult result = GreedyPlayer::play(maze);
+            if (!result.reachedEnd) {
+                output << "FAIL selectBestMaze: " << algoName(algos[i]) << " did not reach end\n";
+                return 9;
+            }
+            if (result.score < bestScore) {
+                bestScore = result.score;
+                bestName = algoName(algos[i]);
+            }
+        }
+        output << QString::asprintf("PASS selectBestMaze (best=%s, score=%.2f)\n",
+                                    bestName.toUtf8().constData(), bestScore);
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }

@@ -17,6 +17,8 @@ add_executable(maze_designer
     src/gui/mainwindow.h
     src/gui/mazewidget.cpp
     src/gui/mazewidget.h
+    src/ai/greedy_player.cpp
+    src/ai/greedy_player.h
 )
 
 target_include_directories(maze_designer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
