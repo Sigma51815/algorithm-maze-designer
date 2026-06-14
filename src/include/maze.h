@@ -65,6 +65,10 @@ public:
                                               int coinConsumption) const;
     [[nodiscard]] MazeModel extractSubArea(int centerCell) const;
 
+    [[nodiscard]] QVector<MazeEdge> allEdges() const;
+    void setFromEdges(int rows, int columns, const QVector<MazeEdge> &edges, quint32 seed);
+    void setResources(const QVector<int> &resources);
+
 private:
     static constexpr int Up = 0;
     static constexpr int Right = 1;

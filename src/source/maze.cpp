@@ -804,6 +804,37 @@ QJsonObject MazeModel::toCrossTestJson(const QVector<int> &bossHealth,
     return object;
 }
 
+QVector<MazeEdge> MazeModel::allEdges() const {
+    QSet<quint64> seen;
+    QVector<MazeEdge> edges;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        for (int next : neighbors(cell)) {
+            int lo = std::min(cell, next);
+            int hi = std::max(cell, next);
+            quint64 key = (static_cast<quint64>(lo) << 32) | static_cast<quint32>(hi);
+            if (!seen.contains(key)) {
+                seen.insert(key);
+                edges.append({lo, hi});
+            }
+        }
+    }
+    return edges;
+}
+
+void MazeModel::setFromEdges(int rows, int columns, const QVector<MazeEdge> &edges,
+                              quint32 seed) {
+    reset(rows, columns, seed);
+    for (const MazeEdge &edge : edges) {
+        carve(edge.from, edge.to);
+    }
+    chooseDiameterEndpoints();
+    hasBoss_ = true;
+}
+
+void MazeModel::setResources(const QVector<int> &resources) {
+    resources_ = resources;
+}
+
 MazeModel MazeModel::extractSubArea(int centerCell) const {
     MazeModel sub;
     const int cr = rowOf(centerCell);

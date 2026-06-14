@@ -3,9 +3,11 @@
 #include "ai/greedy_player.h"
 #include "bosssolver.h"
 #include "maze.h"
+#include "maze_optimizer.h"
 
 #include <QMainWindow>
 
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -48,6 +50,21 @@ private:
     int revealedPathPoints_ = 0;
     int revealedAiPoints_ = 0;
 
+    QSpinBox *optPopSpin_ = nullptr;
+    QSpinBox *optGenSpin_ = nullptr;
+    QSpinBox *optMutSpin_ = nullptr;
+    QComboBox *optAlgoBox_ = nullptr;
+    QLabel *optProgressLabel_ = nullptr;
+    QLabel *optResultLabel_ = nullptr;
+    QPushButton *optRunButton_ = nullptr;
+    QPushButton *optStopButton_ = nullptr;
+    QPushButton *optApplyButton_ = nullptr;
+    QCheckBox *optRLCheck_ = nullptr;
+    QSpinBox *optRLEpisodesSpin_ = nullptr;
+    QSpinBox *optRLTopKSpin_ = nullptr;
+    MazeModel optimizedMaze_;
+    bool hasOptimizedMaze_ = false;
+
     void buildUi();
     void generateMaze();
     void placeResources();
@@ -56,6 +73,8 @@ private:
     void showBattleAnimation();
     void exportMaze();
     void runAiPlayer();
+    void runOptimizer();
+    void applyOptimizedMaze();
     void updateValidation();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;
     [[nodiscard]] QVector<BossSkill> parseSkills(bool *ok = nullptr) const;

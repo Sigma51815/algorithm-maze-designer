@@ -3,6 +3,13 @@
 #include "bosssolver.h"
 #include "maze.h"
 
+enum class GreedyStrategy {
+    ValuePerStep,
+    NearestFirst,
+    AvoidTraps,
+    EndGoalFirst
+};
+
 struct PlayResult {
     bool reachedEnd = false;
     int totalSteps = 0;
@@ -20,5 +27,6 @@ public:
     static PlayResult play(const MazeModel &maze,
                            const QVector<int> &bossHealth = {},
                            const QVector<BossSkill> &bossSkills = {},
-                           int initialResource = 0);
+                           int initialResource = 0,
+                           GreedyStrategy strategy = GreedyStrategy::ValuePerStep);
 };

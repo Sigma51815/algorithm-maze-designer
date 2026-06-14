@@ -50,9 +50,10 @@ QVector<int> bfsDistances(const MazeModel &maze, int from) {
 } // namespace
 
 PlayResult GreedyPlayer::play(const MazeModel &maze,
-                              const QVector<int> &bossHealth,
-                              const QVector<BossSkill> &bossSkills,
-                              int initialResource) {
+                               const QVector<int> &bossHealth,
+                               const QVector<BossSkill> &bossSkills,
+                               int initialResource,
+                               GreedyStrategy strategy) {
     PlayResult result;
     if (maze.cellCount() == 0) return result;
 
@@ -73,16 +74,37 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
         const QVector<int> dist = bfsDistances(maze, pos);
         int target = -1;
         double bestScore = -1.0;
-        for (int cell = 0; cell < maze.cellCount(); ++cell) {
-            if (cell == pos) continue;
-            if (visitedResources.contains(cell)) continue;
-            int val = maze.resourceAt(cell);
-            if (val <= 0) continue;
-            if (dist[cell] <= 0) continue;
-            double sc = static_cast<double>(val) / dist[cell];
-            if (sc > bestScore) {
-                bestScore = sc;
-                target = cell;
+
+        if (strategy == GreedyStrategy::EndGoalFirst) {
+            target = maze.endCell();
+        } else {
+            for (int cell = 0; cell < maze.cellCount(); ++cell) {
+                if (cell == pos) continue;
+                if (visitedResources.contains(cell)) continue;
+                int val = maze.resourceAt(cell);
+                if (val <= 0 && strategy == GreedyStrategy::AvoidTraps) continue;
+                if (val <= 0 && strategy != GreedyStrategy::ValuePerStep) continue;
+                if (dist[cell] <= 0) continue;
+
+                double sc = 0.0;
+                switch (strategy) {
+                case GreedyStrategy::ValuePerStep:
+                    sc = (val > 0) ? static_cast<double>(val) / dist[cell] : 0.0;
+                    break;
+                case GreedyStrategy::NearestFirst:
+                    sc = 1.0 / dist[cell];
+                    break;
+                case GreedyStrategy::AvoidTraps:
+                    sc = (val > 0) ? static_cast<double>(val) / dist[cell] : 0.0;
+                    break;
+                case GreedyStrategy::EndGoalFirst:
+                    sc = 0.0;
+                    break;
+                }
+                if (sc > bestScore) {
+                    bestScore = sc;
+                    target = cell;
+                }
             }
         }
 
