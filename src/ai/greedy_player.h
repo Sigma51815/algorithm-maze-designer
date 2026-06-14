@@ -1,31 +1,24 @@
 #pragma once
 
-#include "core/maze.h"
-#include "core/bosssolver.h"
-
-#include <QVector>
+#include "bosssolver.h"
+#include "maze.h"
 
 struct PlayResult {
-    double score = 0.0;
+    bool reachedEnd = false;
+    int totalSteps = 0;
     int remainingResource = 0;
+    double score = 0.0;
     int collectedCoins = 0;
     int triggeredTraps = 0;
-    int totalSteps = 0;
-    QVector<int> path;
-    bool reachedEnd = false;
+    QVector<int> walk;
     bool bossDefeated = false;
     int bossAttempts = 0;
 };
 
 class GreedyPlayer {
 public:
-    static PlayResult play(MazeModel &maze,
+    static PlayResult play(const MazeModel &maze,
                            const QVector<int> &bossHealth = {},
-                           const QVector<BossSkill> &skills = {},
-                           int reviveCost = 100);
-
-private:
-    static QVector<int> observeVisible(const MazeModel &maze, int pos);
-    static int bfsDistance(const MazeModel &maze, int from, int to);
-    static QVector<int> bfsPath(const MazeModel &maze, int from, int to);
+                           const QVector<BossSkill> &bossSkills = {},
+                           int initialResource = 0);
 };

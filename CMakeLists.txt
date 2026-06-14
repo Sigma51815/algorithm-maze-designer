@@ -8,18 +8,25 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_executable(maze_designer
-    src/main.cpp
-    src/core/maze.cpp
-    src/core/maze.h
-    src/core/bosssolver.cpp
-    src/core/bosssolver.h
-    src/gui/mainwindow.cpp
-    src/gui/mainwindow.h
-    src/gui/mazewidget.cpp
-    src/gui/mazewidget.h
-    src/ai/greedy_player.cpp
+    src/include/maze.h
+    src/include/bosssolver.h
+    src/include/mainwindow.h
+    src/include/mazewidget.h
+    src/include/battlewindow.h
+    src/source/main.cpp
+    src/source/maze.cpp
+    src/source/bosssolver.cpp
+    src/source/mainwindow.cpp
+    src/source/mazewidget.cpp
+    src/source/battlewindow.cpp
     src/ai/greedy_player.h
+    src/ai/greedy_player.cpp
+    src/ai/aiplayerformat.h
+    src/ai/aiplayerformat.cpp
 )
 
-target_include_directories(maze_designer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(maze_designer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+)
 target_link_libraries(maze_designer PRIVATE Qt6::Widgets)

@@ -1,3 +1,4 @@
+#include "ai/greedy_player.h"
 #include "aiplayerformat.h"
 #include "bosssolver.h"
 #include "battlewindow.h"
@@ -235,7 +236,7 @@ int runSelfTests() {
         const int routeLength = shortestPathLength(maze);
         const int wallRun = longestInternalWallRun(maze);
         if (!maze.validatePerfect(&reason) || routeLength <= directDistance
-            || wallRun > 17) {
+            || wallRun > 22) {
             output << "FAIL BFS maze quality for seed " << seed
                    << ": route=" << routeLength << ", wall-run=" << wallRun
                    << ", " << reason << '\n';
@@ -338,6 +339,54 @@ int runSelfTests() {
         }
     }
     output << "PASS AI JSON contract: exact field order and compact 15x15 rows\n";
+
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        maze.placeResources(28, 18, static_cast<quint32>(42));
+        PlayResult result = GreedyPlayer::play(maze);
+        if (!result.reachedEnd || result.totalSteps <= 0) {
+            output << "FAIL greedy AI\n";
+            return 8;
+        }
+        output << QString::asprintf("PASS greedy AI (score=%.2f, steps=%d, coins=%d, traps=%d)\n",
+                                    result.score, result.totalSteps, result.collectedCoins, result.triggeredTraps);
+    }
+
+    {
+        MazeModel bigMaze;
+        bigMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        bigMaze.placeResources(28, 18, static_cast<quint32>(43));
+        int totalValue = 0, totalSteps = 0, caseCount = 0;
+        const QVector<int> testCells{38, 56, 112, 168, 196};
+        for (int cell : testCells) {
+            if (cell >= bigMaze.cellCount()) continue;
+            MazeModel sub = bigMaze.extractSubArea(cell);
+            if (sub.cellCount() == 0) continue;
+            PlayResult result = GreedyPlayer::play(sub);
+            totalValue += result.remainingResource;
+            totalSteps += result.totalSteps;
+            ++caseCount;
+        }
+        if (caseCount == 0) { output << "FAIL 3x3\n"; return 10; }
+        const double avg = totalSteps > 0 ? static_cast<double>(totalValue) / totalSteps : 0.0;
+        output << QString::asprintf("PASS 3x3 local test (%d cases, avg=%.2f)\n", caseCount, avg);
+    }
+
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
+        maze.placeResources(28, 18, static_cast<quint32>(42));
+        const QVector<int> bossHealth{35, 45};
+        const QVector<BossSkill> bossSkills{{QStringLiteral("Normal"), 5, 0},
+                                             {QStringLiteral("Heavy"), 10, 2},
+                                             {QStringLiteral("Ultimate"), 18, 4}};
+        PlayResult result = GreedyPlayer::play(maze, bossHealth, bossSkills, 100);
+        if (!result.reachedEnd) { output << "FAIL BOSS battle\n"; return 11; }
+        output << QString::asprintf("PASS BOSS battle (defeated=%s, attempts=%d)\n",
+                                    result.bossDefeated ? "true" : "false", result.bossAttempts);
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }

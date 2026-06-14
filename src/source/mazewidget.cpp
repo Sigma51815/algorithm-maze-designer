@@ -37,6 +37,19 @@ void MazeWidget::clearSolutionPath() {
     update();
 }
 
+void MazeWidget::setAiPath(const QVector<int> &path, int visiblePoints) {
+    aiPath_ = path;
+    visibleAiPoints_ = std::clamp(visiblePoints, 0,
+                                  static_cast<int>(aiPath_.size()));
+    update();
+}
+
+void MazeWidget::clearAiPath() {
+    aiPath_.clear();
+    visibleAiPoints_ = 0;
+    update();
+}
+
 QSize MazeWidget::minimumSizeHint() const {
     return {560, 560};
 }
@@ -110,6 +123,18 @@ void MazeWidget::paintEvent(QPaintEvent *) {
         painter.setPen(pathPen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
+    }
+
+    if (visibleAiPoints_ > 1) {
+        QPainterPath aiPathPainter(centerOf(aiPath_[0]));
+        for (int i = 1; i < visibleAiPoints_; ++i) {
+            aiPathPainter.lineTo(centerOf(aiPath_[i]));
+        }
+        QPen aiPathPen(QColor("#2ea043"), std::max(2.0, cellSize * 0.22),
+                       Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        painter.setPen(aiPathPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(aiPathPainter);
     }
 
     painter.setPen(Qt::NoPen);

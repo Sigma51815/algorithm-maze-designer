@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ai/greedy_player.h"
 #include "bosssolver.h"
 #include "maze.h"
 
@@ -24,6 +25,7 @@ private:
     MazeModel maze_;
     ResourcePlan lastPlan_;
     BossResult lastBossResult_;
+    PlayResult lastAiResult_;
     MazeWidget *mazeWidget_ = nullptr;
     QComboBox *algorithmBox_ = nullptr;
     QSpinBox *rowsSpin_ = nullptr;
@@ -41,8 +43,10 @@ private:
     QPlainTextEdit *bossOutput_ = nullptr;
     QTimer *generationTimer_ = nullptr;
     QTimer *pathTimer_ = nullptr;
+    QTimer *aiPathTimer_ = nullptr;
     int revealedEdges_ = 0;
     int revealedPathPoints_ = 0;
+    int revealedAiPoints_ = 0;
 
     void buildUi();
     void generateMaze();
@@ -51,6 +55,7 @@ private:
     void solveBossBattle();
     void showBattleAnimation();
     void exportMaze();
+    void runAiPlayer();
     void updateValidation();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;
     [[nodiscard]] QVector<BossSkill> parseSkills(bool *ok = nullptr) const;

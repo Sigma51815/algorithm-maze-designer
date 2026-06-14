@@ -14,6 +14,8 @@ public:
     void setRevealCount(int count);
     void setSolutionPath(const QVector<int> &path, int visiblePoints);
     void clearSolutionPath();
+    void setAiPath(const QVector<int> &path, int visiblePoints);
+    void clearAiPath();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -25,6 +27,8 @@ private:
     int revealCount_ = 0;
     QVector<int> solutionPath_;
     int visiblePathPoints_ = 0;
+    QVector<int> aiPath_;
+    int visibleAiPoints_ = 0;
 
     [[nodiscard]] bool passageVisible(int first, int second) const;
 };

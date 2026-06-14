@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bosssolver.h"
+#include "bosssolver.h"
 
 #include <QJsonObject>
 #include <QString>
@@ -27,6 +27,13 @@ struct ResourcePlan {
     QVector<int> collectedCells;
 };
 
+struct MazeStatistics {
+    int solutionLength = 0;
+    int deadEnds = 0;
+    int junctions = 0;
+    int longestCorridor = 0;
+};
+
 class MazeModel {
 public:
     void generate(int rows, int columns, MazeAlgorithm algorithm, quint32 seed);
@@ -35,8 +42,8 @@ public:
     [[nodiscard]] int rows() const { return rows_; }
     [[nodiscard]] int columns() const { return columns_; }
     [[nodiscard]] int cellCount() const { return rows_ * columns_; }
-    [[nodiscard]] int startCell() const { return 0; }
-    [[nodiscard]] int endCell() const { return cellCount() - 1; }
+    [[nodiscard]] int startCell() const { return startCell_; }
+    [[nodiscard]] int endCell() const { return endCell_; }
     [[nodiscard]] int bossCell() const { return bossCell_; }
     [[nodiscard]] bool hasBoss() const { return hasBoss_; }
     void setBossCell(int cell);
@@ -47,6 +54,7 @@ public:
     [[nodiscard]] const QVector<MazeEdge> &generationSteps() const { return generationSteps_; }
 
     [[nodiscard]] bool validatePerfect(QString *reason = nullptr) const;
+    [[nodiscard]] MazeStatistics statistics() const;
     [[nodiscard]] ResourcePlan optimalResourceWalk() const;
     [[nodiscard]] QStringList expandedGrid() const;
     [[nodiscard]] QJsonObject toJson() const;
@@ -65,7 +73,9 @@ private:
 
     int rows_ = 0;
     int columns_ = 0;
-    int bossCell_ = -1;
+    int startCell_ = 0;
+    int endCell_ = 0;
+    int bossCell_ = 0;
     bool hasBoss_ = false;
     QVector<std::array<bool, 4>> passages_;
     QVector<int> resources_;
@@ -78,6 +88,7 @@ private:
     [[nodiscard]] QVector<int> gridNeighbors(int cell) const;
     void reset(int rows, int columns, quint32 seed);
     void carve(int first, int second);
+    void chooseDiameterEndpoints();
 
     void generateDivideAndConquer(int top, int bottom, int left, int right);
     void generateKruskal();
