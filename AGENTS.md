@@ -6,9 +6,21 @@ Algorithm course design (算法课设) — a Qt 6 Widgets desktop app that gener
 
 **Tech stack**: C++17, Qt 6 Widgets, CMake + Ninja. No external deps beyond Qt.
 
-## Branch: dev-RL-tmchao7
+## Branch: tmchao7-maze-dev
 
-This branch adds **RL-based maze optimization** on top of the base maze designer. Goal: train an RL agent to generate mazes that minimize AI player scores (maximize difficulty while keeping solvability). See `docs/方案甲_迷宫设计.md` §进阶策略 for the PAIRED/regret-based fitness approach.
+Development branch for personal maze design work. Three-phase plan:
+
+1. **Phase 1 — 基础功能** (done): 4 algo maze gen, DP resource walk, BOSS solver, GUI, JSON export, self-test.
+2. **Phase 2 — AI 玩家**: greedy + DP agent with 3×3 local vision to test maze difficulty. Score = `remaining_resource / total_steps`. See `docs/方案乙_AI玩家.md`.
+3. **Phase 3 — RL/遗传算法**: PAIRED-based maze optimization — maximize regret (DP optimal vs greedy agent). See `docs/方案甲_迷宫设计.md` §五.
+
+## Task spec (任务设计书)
+
+The authoritative requirements are in `docs/任务设计书.md`. Key grading points:
+
+- **迷宫设计**: 4 algorithms with visualization, connectivity validation (`E = V - 1`), optimal resource path via DP, BOSS min-turns via branch-and-bound.
+- **AI 玩家**: greedy resource pickup with 3×3 vision, full maze exploration, score = `remaining_resource / steps`.
+- **交叉测试**: maze designers provide "best maze", AI players compete on all mazes — maze score = AI failure rate / average score.
 
 ## Build & run
 
@@ -71,11 +83,11 @@ All source in flat `src/` — no subdirectories.
 
 | File | Contents |
 |---|---|
-| `docs/任务设计书.md` | Task spec, grading rubric |
+| `docs/任务设计书.md` | Task spec, grading rubric — **read this first** |
 | `docs/算法课程设计思路.md` | Algorithm analysis, pseudocode |
 | `docs/助教验收与评分操作手册.html` | TA acceptance checklist |
-| `docs/方案甲_迷宫设计.md` | Maze design plan |
-| `docs/方案乙_AI玩家.md` | AI player plan (not implemented) |
+| `docs/方案甲_迷宫设计.md` | Maze design plan + PAIRED/genetic optimizer (Phase 3) |
+| `docs/方案乙_AI玩家.md` | AI player plan: greedy, Q-Learning, DRQN (Phase 2) |
 
 ## Gitignore
 
