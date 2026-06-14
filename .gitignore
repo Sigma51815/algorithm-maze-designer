@@ -42,6 +42,8 @@ Thumbs.db
 
 # MiMoCode
 .mimocode/
+AGENTS.md
+CLAUDE.md
 
 # Docs (reference materials, not source code)
 /docs/
