@@ -1,5 +1,5 @@
 #include "ai/greedy_player.h"
-#include "aiplayerformat.h"
+#include "ai/aiplayerformat.h"
 #include "bosssolver.h"
 #include "battlewindow.h"
 #include "mainwindow.h"

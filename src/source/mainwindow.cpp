@@ -1,6 +1,6 @@
 #include "mainwindow.h"
 
-#include "aiplayerformat.h"
+#include "ai/aiplayerformat.h"
 #include "battlewindow.h"
 #include "mazewidget.h"
 
