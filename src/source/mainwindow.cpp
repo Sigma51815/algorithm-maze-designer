@@ -151,14 +151,14 @@ void MainWindow::buildUi() {
         QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
     skillsEdit_->setToolTip(QStringLiteral("格式：名称:伤害:冷却；至少一个技能冷却为 0"));
     extraTurnsSpin_ = new QSpinBox;
-    extraTurnsSpin_->setRange(0, 20);
-    extraTurnsSpin_->setValue(2);
+    extraTurnsSpin_->setRange(1, 9999);
+    extraTurnsSpin_->setValue(20);
     reviveCostSpin_ = new QSpinBox;
     reviveCostSpin_->setRange(0, 1000);
     reviveCostSpin_->setValue(5);
     bossForm->addRow(QStringLiteral("BOSS 血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能 名称:伤害:冷却"), skillsEdit_);
-    bossForm->addRow(QStringLiteral("限定回合余量（最少+余量）"), extraTurnsSpin_);
+    bossForm->addRow(QStringLiteral("限定回合数 minRouds"), extraTurnsSpin_);
     bossForm->addRow(QStringLiteral("失败金币消耗"), reviveCostSpin_);
     bossLayout->addLayout(bossForm);
     auto *solveBossButton = new QPushButton(QStringLiteral("分支限界求最优技能序列"));
@@ -350,7 +350,7 @@ void MainWindow::solveBossBattle() {
         QStringLiteral("最少回合数：%1\n限定回合数：%2\n复活所需金币：%3\n"
                        "最优技能序列：%4\n搜索状态：%5，剪枝：%6")
             .arg(lastBossResult_.minimumTurns)
-            .arg(lastBossResult_.minimumTurns + extraTurnsSpin_->value())
+            .arg(extraTurnsSpin_->value())
             .arg(reviveCostSpin_->value())
             .arg(sequenceNames.join(QStringLiteral(" → ")))
             .arg(lastBossResult_.expandedStates)
@@ -378,7 +378,7 @@ void MainWindow::showBattleAnimation() {
 
     auto *battleWindow = new BattleWindow(
         health, skills, lastBossResult_,
-        lastBossResult_.minimumTurns + extraTurnsSpin_->value(),
+        extraTurnsSpin_->value(),
         reviveCostSpin_->value(), this);
     battleWindow->show();
     battleWindow->raise();
@@ -432,14 +432,12 @@ void MainWindow::exportMaze() {
         return;
     }
 
-    const QJsonObject root = buildAiPlayerInput(
-        maze_, health, skills,
-        lastBossResult_.minimumTurns + extraTurnsSpin_->value(),
-        reviveCostSpin_->value());
+    const QByteArray exportedJson = serializeAiPlayerInput(
+        maze_, health, skills, extraTurnsSpin_->value(), reviveCostSpin_->value());
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)
-        || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
+        || file.write(exportedJson) < 0
         || !file.commit()) {
         QMessageBox::critical(this, QStringLiteral("导出失败"), file.errorString());
         return;

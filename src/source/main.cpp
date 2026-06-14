@@ -275,7 +275,9 @@ int runSelfTests() {
     contractMaze.generate(7, 7, MazeAlgorithm::KruskalMst, 202506U);
     contractMaze.placeResources(8, 6, 202507U);
     const QJsonObject contract = buildAiPlayerInput(
-        contractMaze, bosses, skills, bossResult.minimumTurns + 2, 5);
+        contractMaze, bosses, skills, 20, 5);
+    const QByteArray serializedContract = serializeAiPlayerInput(
+        contractMaze, bosses, skills, 20, 5);
     const QSet<QString> expectedKeys{QStringLiteral("maze"), QStringLiteral("B"),
                                      QStringLiteral("PlayerSkills"),
                                      QStringLiteral("minRouds"),
@@ -310,17 +312,32 @@ int runSelfTests() {
         output << "FAIL AI JSON contract\n";
         return 10;
     }
+    QJsonParseError parseError;
+    const QJsonDocument parsedContract = QJsonDocument::fromJson(
+        serializedContract, &parseError);
+    const int mazePosition = serializedContract.indexOf("\"maze\"");
+    const int bossesPosition = serializedContract.indexOf("\"B\"");
+    const int skillsPosition = serializedContract.indexOf("\"PlayerSkills\"");
+    const int roundsPosition = serializedContract.indexOf("\"minRouds\"");
+    const int coinsPosition = serializedContract.indexOf("\"CoinConsumption\"");
+    if (parseError.error != QJsonParseError::NoError || !parsedContract.isObject()
+        || !(mazePosition < bossesPosition && bossesPosition < skillsPosition
+             && skillsPosition < roundsPosition && roundsPosition < coinsPosition)
+        || !serializedContract.contains("[\"#\",\"#\",\"#\"")) {
+        output << "FAIL AI JSON serialization format\n";
+        return 12;
+    }
     const QByteArray previewPath = qgetenv("AI_JSON_PREVIEW_PATH");
     if (!previewPath.isEmpty()) {
         QSaveFile preview(QString::fromLocal8Bit(previewPath));
         if (!preview.open(QIODevice::WriteOnly)
-            || preview.write(QJsonDocument(contract).toJson(QJsonDocument::Indented)) < 0
+            || preview.write(serializedContract) < 0
             || !preview.commit()) {
             output << "FAIL writing AI JSON preview\n";
             return 11;
         }
     }
-    output << "PASS AI JSON contract: 15x15, unique S/E/B, exact fields\n";
+    output << "PASS AI JSON contract: exact field order and compact 15x15 rows\n";
     output << "ALL TESTS PASSED\n";
     return 0;
 }

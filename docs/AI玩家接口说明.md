@@ -18,6 +18,8 @@
 - `minRouds`：允许完成整场 BOSS 战的回合数。字段名沿用课程接口中的拼写。
 - `CoinConsumption`：超出限定回合后复活所需消耗的金币。
 
+导出器按课程样例保持字段顺序：`maze`、`B`、`PlayerSkills`、`minRouds`、`CoinConsumption`；矩阵中的每一行写在单独一行，不使用 Qt 默认的多行数组展开格式。
+
 矩阵字符：
 
 - `#`：墙壁
