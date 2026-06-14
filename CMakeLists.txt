@@ -13,16 +13,16 @@ add_executable(maze_designer
     src/include/mainwindow.h
     src/include/mazewidget.h
     src/include/battlewindow.h
+    src/include/ai/greedy_player.h
+    src/include/ai/aiplayerformat.h
     src/source/main.cpp
     src/source/maze.cpp
     src/source/bosssolver.cpp
     src/source/mainwindow.cpp
     src/source/mazewidget.cpp
     src/source/battlewindow.cpp
-    src/ai/greedy_player.h
-    src/ai/greedy_player.cpp
-    src/ai/aiplayerformat.h
-    src/ai/aiplayerformat.cpp
+    src/source/ai/greedy_player.cpp
+    src/source/ai/aiplayerformat.cpp
 )
 
 target_include_directories(maze_designer PRIVATE
