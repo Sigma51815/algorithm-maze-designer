@@ -1,6 +1,41 @@
+# Build
 /build/
 /dist/
+/out/
+
+# CMake (generated inside build/)
+CMakeLists.txt.user
+compile_commands.json
+
+# Object files
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+
+# Qt generated
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
+*.prl
+
+# IDE
 /.idea/
 /.vscode/
-*.user
-*.autosave
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+*.exe
+*.app
+*.tmp
