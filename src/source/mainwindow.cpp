@@ -25,6 +25,7 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QThread>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -762,8 +763,11 @@ void MainWindow::runOptimizer() {
     optResultLabel_->setVisible(false);
     optProgressLabel_->setText(QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
 
-    auto *optimizer = new MazeOptimizer(this);
+    auto *optimizer = new MazeOptimizer;
     optimizer->setConfig(cfg);
+
+    auto *thread = new QThread;
+    optimizer->moveToThread(thread);
 
     connect(optimizer, &MazeOptimizer::generationFinished, this,
             [this, cfg](const OptimizerStats &stats) {
@@ -779,13 +783,12 @@ void MainWindow::runOptimizer() {
                         .arg(stats.bestGreedyScore)
                         .arg(stats.bestDpScore - stats.bestGreedyScore)
                         .arg(rlTag));
-                QCoreApplication::processEvents();
             });
 
     connect(optStopButton_, &QPushButton::clicked, optimizer, &MazeOptimizer::stop);
 
     connect(optimizer, &MazeOptimizer::finished, this,
-            [this, optimizer](const MazeModel &bestMaze) {
+            [this, thread, optimizer](const MazeModel &bestMaze) {
                 optimizedMaze_ = bestMaze;
                 hasOptimizedMaze_ = true;
                 optRunButton_->setEnabled(true);
@@ -802,10 +805,16 @@ void MainWindow::runOptimizer() {
                         .arg(greedy.remainingResource)
                         .arg(dp.maxValue - greedy.remainingResource));
                 optResultLabel_->setVisible(true);
-                optimizer->deleteLater();
+                thread->quit();
             });
 
-    optimizer->run();
+    connect(thread, &QThread::started, optimizer, [optimizer]() {
+        optimizer->run();
+    });
+    connect(thread, &QThread::finished, optimizer, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+    thread->start();
 }
 
 void MainWindow::applyOptimizedMaze() {

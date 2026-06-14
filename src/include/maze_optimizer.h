@@ -47,6 +47,9 @@ public:
     MazeModel run();
     void stop();
 
+    static void edgeSwap(MazeModel &maze, std::mt19937 &rng);
+    static MazeModel crossover(const MazeModel &a, const MazeModel &b, std::mt19937 &rng);
+
 signals:
     void generationFinished(const OptimizerStats &stats);
     void finished(const MazeModel &bestMaze);

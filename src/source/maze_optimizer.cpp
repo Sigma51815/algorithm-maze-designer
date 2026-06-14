@@ -319,3 +319,145 @@ MazeOptimizer::Chromosome MazeOptimizer::tournamentSelect(
     }
     return *best;
 }
+
+void MazeOptimizer::edgeSwap(MazeModel &maze, std::mt19937 &rng) {
+    const int rows = maze.rows();
+    const int cols = maze.columns();
+    const int totalCells = rows * cols;
+    QVector<MazeEdge> edges = maze.allEdges();
+
+    auto edgeKey = [](int a, int b) -> quint64 {
+        int lo = std::min(a, b), hi = std::max(a, b);
+        return (static_cast<quint64>(lo) << 32) | static_cast<quint32>(hi);
+    };
+
+    QSet<quint64> edgeSet;
+    for (const MazeEdge &e : edges) {
+        edgeSet.insert(edgeKey(e.from, e.to));
+    }
+
+    QVector<MazeEdge> wallCandidates;
+    for (int cell = 0; cell < totalCells; ++cell) {
+        int row = cell / cols;
+        int col = cell % cols;
+        if (col + 1 < cols) {
+            int right = cell + 1;
+            if (!edgeSet.contains(edgeKey(cell, right)))
+                wallCandidates.append({cell, right});
+        }
+        if (row + 1 < rows) {
+            int down = cell + cols;
+            if (!edgeSet.contains(edgeKey(cell, down)))
+                wallCandidates.append({cell, down});
+        }
+    }
+
+    if (wallCandidates.empty()) return;
+
+    std::shuffle(wallCandidates.begin(), wallCandidates.end(), rng);
+    const MazeEdge newEdge = wallCandidates.first();
+
+    QVector<int> parent(totalCells, -1);
+    QQueue<int> queue;
+    parent[newEdge.from] = newEdge.from;
+    queue.enqueue(newEdge.from);
+    while (!queue.isEmpty() && parent[newEdge.to] < 0) {
+        int cur = queue.dequeue();
+        for (int next : maze.neighbors(cur)) {
+            if (parent[next] < 0) {
+                parent[next] = cur;
+                queue.enqueue(next);
+            }
+        }
+    }
+
+    if (parent[newEdge.to] < 0) return;
+
+    QVector<int> cyclePath;
+    for (int cell = newEdge.to;; cell = parent[cell]) {
+        cyclePath.append(cell);
+        if (cell == newEdge.from) break;
+    }
+
+    if (cyclePath.size() < 3) return;
+
+    std::uniform_int_distribution<int> edgeDist(0, cyclePath.size() - 2);
+    int removeIdx = edgeDist(rng);
+    int removeA = cyclePath[removeIdx];
+    int removeB = cyclePath[removeIdx + 1];
+
+    QSet<quint64> newEdgeSet = edgeSet;
+    newEdgeSet.remove(edgeKey(removeA, removeB));
+    newEdgeSet.insert(edgeKey(newEdge.from, newEdge.to));
+
+    QVector<MazeEdge> newEdges;
+    newEdges.reserve(edges.size());
+    for (const auto &key : newEdgeSet) {
+        int from = static_cast<int>(key >> 32);
+        int to = static_cast<int>(key & 0xFFFFFFFF);
+        newEdges.append({from, to});
+    }
+
+    maze.setFromEdges(rows, cols, newEdges, rng());
+}
+
+MazeModel MazeOptimizer::crossover(const MazeModel &a, const MazeModel &b, std::mt19937 &rng) {
+    const int rows = a.rows();
+    const int cols = a.columns();
+    const int totalCells = rows * cols;
+    const int targetEdges = totalCells - 1;
+
+    QVector<MazeEdge> edgesA = a.allEdges();
+    QVector<MazeEdge> edgesB = b.allEdges();
+
+    QVector<MazeEdge> combined;
+    combined.reserve(edgesA.size() + edgesB.size());
+    combined += edgesA;
+    combined += edgesB;
+    std::shuffle(combined.begin(), combined.end(), rng);
+
+    QVector<int> ufParent(totalCells);
+    QVector<int> ufRank(totalCells, 0);
+    std::iota(ufParent.begin(), ufParent.end(), 0);
+
+    std::function<int(int)> find = [&](int x) -> int {
+        if (ufParent[x] != x) ufParent[x] = find(ufParent[x]);
+        return ufParent[x];
+    };
+    auto unite = [&](int u, int v) -> bool {
+        int ru = find(u), rv = find(v);
+        if (ru == rv) return false;
+        if (ufRank[ru] < ufRank[rv]) std::swap(ru, rv);
+        ufParent[rv] = ru;
+        if (ufRank[ru] == ufRank[rv]) ++ufRank[ru];
+        return true;
+    };
+
+    QVector<MazeEdge> childEdges;
+    childEdges.reserve(targetEdges);
+    for (const MazeEdge &e : combined) {
+        if (unite(e.from, e.to)) {
+            childEdges.append(e);
+            if (childEdges.size() == targetEdges) break;
+        }
+    }
+
+    for (int cell = 0; childEdges.size() < targetEdges && cell < totalCells; ++cell) {
+        int row = cell / cols;
+        int col = cell % cols;
+        if (col + 1 < cols) {
+            int right = cell + 1;
+            if (unite(cell, right))
+                childEdges.append({std::min(cell, right), std::max(cell, right)});
+        }
+        if (row + 1 < rows) {
+            int down = cell + cols;
+            if (unite(cell, down))
+                childEdges.append({std::min(cell, down), std::max(cell, down)});
+        }
+    }
+
+    MazeModel child;
+    child.setFromEdges(rows, cols, childEdges, rng());
+    return child;
+}

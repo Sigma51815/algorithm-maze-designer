@@ -1,9 +1,13 @@
 #include "ai/greedy_player.h"
+#include "ai/rl_player.h"
 #include "ai/aiplayerformat.h"
 #include "bosssolver.h"
 #include "battlewindow.h"
+#include "coevolution.h"
 #include "mainwindow.h"
 #include "maze.h"
+#include "maze_optimizer.h"
+#include "qlearning_optimizer.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -385,6 +389,127 @@ int runSelfTests() {
         if (!result.reachedEnd) { output << "FAIL BOSS battle\n"; return 11; }
         output << QString::asprintf("PASS BOSS battle (defeated=%s, attempts=%d)\n",
                                     result.bossDefeated ? "true" : "false", result.bossAttempts);
+    }
+
+    {
+        MazeModel baseMaze;
+        baseMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 9000U);
+        baseMaze.placeResources(5, 3, 9001U);
+        const ResourcePlan dpPlan = baseMaze.optimalResourceWalk();
+
+        int worstGreedy = std::numeric_limits<int>::max();
+        const QVector<GreedyStrategy> strategies = {
+            GreedyStrategy::ValuePerStep,
+            GreedyStrategy::NearestFirst,
+            GreedyStrategy::AvoidTraps,
+            GreedyStrategy::EndGoalFirst
+        };
+        for (GreedyStrategy s : strategies) {
+            PlayResult result = GreedyPlayer::play(baseMaze, {}, {}, 0, s);
+            worstGreedy = std::min(worstGreedy, result.remainingResource);
+        }
+        const int baseRegret = dpPlan.maxValue - worstGreedy;
+
+        OptimizerConfig cfg;
+        cfg.rows = 5;
+        cfg.columns = 5;
+        cfg.populationSize = 10;
+        cfg.generations = 20;
+        cfg.mutationRate = 0.4;
+        cfg.tournamentSize = 3;
+        cfg.baseAlgorithm = MazeAlgorithm::KruskalMst;
+        cfg.seed = 9000U;
+        cfg.coinCount = 5;
+        cfg.trapCount = 3;
+
+        MazeOptimizer optimizer;
+        optimizer.setConfig(cfg);
+        const MazeModel bestMaze = optimizer.run();
+
+        if (!bestMaze.validatePerfect()) {
+            output << "FAIL GA produced invalid maze\n";
+            return 16;
+        }
+        const ResourcePlan optDp = bestMaze.optimalResourceWalk();
+        int optWorstGreedy = std::numeric_limits<int>::max();
+        for (GreedyStrategy s : strategies) {
+            PlayResult result = GreedyPlayer::play(bestMaze, {}, {}, 0, s);
+            optWorstGreedy = std::min(optWorstGreedy, result.remainingResource);
+        }
+        const int optRegret = optDp.maxValue - optWorstGreedy;
+        output << "PASS GA optimizer: base=" << baseRegret
+               << ", best=" << optRegret
+               << ", dp=" << optDp.maxValue << '\n';
+    }
+
+    {
+        MazeModel trainMaze;
+        trainMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
+        trainMaze.placeResources(30, 20, 11001U);
+
+        RLPlayer rlPlayer;
+        RLConfig rlCfg;
+        rlCfg.trainEpisodes = 2000;
+        rlCfg.playMaxSteps = 800;
+        rlCfg.coinCount = 30;
+        rlCfg.trapCount = 20;
+
+        const RLPlayResult before = rlPlayer.play(trainMaze, rlCfg);
+        rlPlayer.trainOnMaze(trainMaze, rlCfg);
+        const RLPlayResult after = rlPlayer.play(trainMaze, rlCfg);
+
+        MazeModel testMaze;
+        testMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
+        testMaze.placeResources(30, 20, 55000U);
+        const RLPlayResult testResult = rlPlayer.play(testMaze, rlCfg);
+
+        MazeModel genMaze;
+        genMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 22000U);
+        genMaze.placeResources(30, 20, 22001U);
+        const RLPlayResult genResult = rlPlayer.play(genMaze, rlCfg);
+
+        if (after.totalResource < before.totalResource) {
+            output << "FAIL RL score decreased: before=" << before.totalResource
+                   << ", after=" << after.totalResource << '\n';
+            return 20;
+        }
+        output << "PASS RL player: before=" << before.totalResource
+               << ", after=" << after.totalResource
+               << ", steps=" << after.steps
+               << ", sameMaze=" << testResult.totalResource
+               << ", diffMaze=" << genResult.totalResource << '\n';
+    }
+
+    {
+        CoEvolConfig cfg;
+        cfg.cycles = 2;
+        cfg.gaGenerations = 3;
+        cfg.gaPopulation = 8;
+        cfg.gaMutationRate = 0.3;
+        cfg.rlTrainEpisodes = 200;
+        cfg.rlTopK = 3;
+        cfg.mazeRows = 15;
+        cfg.mazeCols = 15;
+        cfg.baseAlgorithm = MazeAlgorithm::KruskalMst;
+        cfg.baseSeed = 12000U;
+        cfg.coinCount = 5;
+        cfg.trapCount = 3;
+
+        CoEvolution coEvol;
+        const CoEvolResult coResult = coEvol.run(cfg);
+
+        if (!coResult.bestMaze.validatePerfect()) {
+            output << "FAIL co-evolution produced invalid maze\n";
+            return 21;
+        }
+        if (coResult.cycleBestFitness.isEmpty()) {
+            output << "FAIL co-evolution no cycles completed\n";
+            return 22;
+        }
+        output << "PASS co-evolution: cycles=" << coResult.cycleBestFitness.size()
+               << ", bestFitness=" << coResult.bestFitness
+               << ", lastRLScore=" << (coResult.rlScores.isEmpty() ? 0 : coResult.rlScores.last())
+               << '\n';
     }
 
     output << "ALL TESTS PASSED\n";

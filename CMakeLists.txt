@@ -17,6 +17,8 @@ add_executable(maze_designer
     src/include/qlearning_optimizer.h
     src/include/ai/greedy_player.h
     src/include/ai/aiplayerformat.h
+    src/include/ai/rl_player.h
+    src/include/coevolution.h
     src/source/main.cpp
     src/source/maze.cpp
     src/source/bosssolver.cpp
@@ -27,6 +29,8 @@ add_executable(maze_designer
     src/source/qlearning_optimizer.cpp
     src/source/ai/greedy_player.cpp
     src/source/ai/aiplayerformat.cpp
+    src/source/ai/rl_player.cpp
+    src/source/coevolution.cpp
 )
 
 target_include_directories(maze_designer PRIVATE
