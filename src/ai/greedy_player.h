@@ -7,6 +7,8 @@
 struct PlayResult {
     double score = 0.0;
     int remainingResource = 0;
+    int collectedCoins = 0;
+    int triggeredTraps = 0;
     int totalSteps = 0;
     QVector<int> path;
     bool reachedEnd = false;

@@ -91,6 +91,8 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
 
     int pos = maze.startCell();
     int resource = 0;
+    int collectedCoins = 0;
+    int triggeredTraps = 0;
     int steps = 0;
     result.path.append(pos);
 
@@ -115,7 +117,17 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
 
         int target = endCell;
         if (bestTarget >= 0) {
-            target = bestTarget;
+            const QVector<int> candidatePath = bfsPath(maze, pos, bestTarget);
+            bool pathHasTrap = false;
+            for (int i = 1; i < candidatePath.size(); ++i) {
+                if (maze.resourceAt(candidatePath[i]) < 0) {
+                    pathHasTrap = true;
+                    break;
+                }
+            }
+            if (!pathHasTrap) {
+                target = bestTarget;
+            }
         }
 
         const QVector<int> path = bfsPath(maze, pos, target);
@@ -127,6 +139,11 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
         const int val = maze.resourceAt(pos);
         if (val != 0) {
             resource += val;
+            if (val > 0) {
+                collectedCoins += val;
+            } else {
+                ++triggeredTraps;
+            }
             maze.consumeResource(pos);
         }
 
@@ -135,6 +152,8 @@ PlayResult GreedyPlayer::play(MazeModel &maze) {
 
     result.totalSteps = steps;
     result.remainingResource = resource;
+    result.collectedCoins = collectedCoins;
+    result.triggeredTraps = triggeredTraps;
     result.reachedEnd = (pos == endCell);
     result.score = (steps > 0) ? static_cast<double>(resource) / steps : 0.0;
     return result;

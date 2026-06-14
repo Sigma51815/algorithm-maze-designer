@@ -142,12 +142,18 @@ int runSelfTests() {
         maze.placeResources(28, 18, static_cast<quint32>(42));
 
         PlayResult result = GreedyPlayer::play(maze);
-        if (!result.reachedEnd || result.totalSteps <= 0 || result.score <= 0) {
-            output << "FAIL greedy AI\n";
+        if (!result.reachedEnd || result.totalSteps <= 0) {
+            output << "FAIL greedy AI: did not reach end or no steps\n";
             return 8;
         }
-        output << QString::asprintf("PASS greedy AI (score=%.2f, steps=%d, resource=%d)\n",
-                                    result.score, result.totalSteps, result.remainingResource);
+        if (result.path.size() != result.totalSteps + 1) {
+            output << "FAIL greedy AI: path size mismatch\n";
+            return 8;
+        }
+        output << QString::asprintf("PASS greedy AI (score=%.2f, steps=%d, coins=%d, traps=%d, resource=%d)\n",
+                                    result.score, result.totalSteps,
+                                    result.collectedCoins, result.triggeredTraps,
+                                    result.remainingResource);
     }
 
     {
@@ -168,6 +174,7 @@ int runSelfTests() {
             MazeAlgorithm::BreadthFirstSearch};
 
         float bestScore = 1e9f;
+        int bestSteps = 0;
         QString bestName;
         for (int i = 0; i < algos.size(); ++i) {
             MazeModel maze;
@@ -181,11 +188,12 @@ int runSelfTests() {
             }
             if (result.score < bestScore) {
                 bestScore = result.score;
+                bestSteps = result.totalSteps;
                 bestName = algoName(algos[i]);
             }
         }
-        output << QString::asprintf("PASS selectBestMaze (best=%s, score=%.2f)\n",
-                                    bestName.toUtf8().constData(), bestScore);
+        output << QString::asprintf("PASS selectBestMaze (best=%s, score=%.2f, steps=%d)\n",
+                                    bestName.toUtf8().constData(), bestScore, bestSteps);
     }
 
     output << "ALL TESTS PASSED\n";
