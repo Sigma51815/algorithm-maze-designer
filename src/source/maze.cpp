@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <numeric>
+#include <queue>
 
 namespace {
 
@@ -196,23 +197,68 @@ void MazeModel::generateDepthFirst() {
 }
 
 void MazeModel::generateBreadthFirst() {
-    QVector<bool> visited(cellCount(), false);
-    QQueue<int> queue;
-    queue.enqueue(startCell());
-    visited[startCell()] = true;
+    struct FrontierBranch {
+        int lowerBound = 0;
+        quint32 tieBreaker = 0;
+        int from = -1;
+        int to = -1;
+        int depth = 0;
+        int randomWeight = 0;
+        int sourceDegree = 0;
+    };
+    struct WorseBranch {
+        bool operator()(const FrontierBranch &first, const FrontierBranch &second) const {
+            if (first.lowerBound != second.lowerBound) {
+                return first.lowerBound > second.lowerBound;
+            }
+            return first.tieBreaker > second.tieBreaker;
+        }
+    };
 
-    while (!queue.isEmpty()) {
-        const int current = queue.dequeue();
-        QVector<int> choices = gridNeighbors(current);
+    QVector<bool> visited(cellCount(), false);
+    QVector<int> degree(cellCount(), 0);
+    std::priority_queue<FrontierBranch, QVector<FrontierBranch>, WorseBranch> frontier;
+    std::uniform_int_distribution<int> randomCost(0, 999);
+    std::uniform_int_distribution<quint32> tieBreaker;
+
+    auto addBranches = [&](int cell, int depth) {
+        QVector<int> choices = gridNeighbors(cell);
         std::shuffle(choices.begin(), choices.end(), random_);
         for (int next : choices) {
             if (visited[next]) {
                 continue;
             }
-            visited[next] = true;
-            carve(current, next);
-            queue.enqueue(next);
+            // The depth term keeps breadth-first behavior. Random edge cost and
+            // the degree penalty prevent one shallow cell from opening every
+            // adjacent branch and producing a comb-shaped spanning tree.
+            const int randomWeight = randomCost(random_);
+            const int lowerBound = depth * 12 + degree[cell] * 90 + randomWeight;
+            frontier.push({lowerBound, tieBreaker(random_), cell, next, depth,
+                           randomWeight, degree[cell]});
         }
+    };
+
+    visited[startCell()] = true;
+    addBranches(startCell(), 1);
+
+    while (!frontier.empty()) {
+        FrontierBranch branch = frontier.top();
+        frontier.pop();
+        if (visited[branch.to]) {
+            continue;
+        }
+        if (branch.sourceDegree != degree[branch.from]) {
+            branch.sourceDegree = degree[branch.from];
+            branch.lowerBound = branch.depth * 12 + branch.sourceDegree * 90
+                + branch.randomWeight;
+            frontier.push(branch);
+            continue;
+        }
+        visited[branch.to] = true;
+        carve(branch.from, branch.to);
+        ++degree[branch.from];
+        ++degree[branch.to];
+        addBranches(branch.to, branch.depth + 1);
     }
 }
 

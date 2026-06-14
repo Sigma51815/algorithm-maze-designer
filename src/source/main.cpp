@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QQueue>
 #include <QSet>
 #include <QTextStream>
 #include <QTimer>
@@ -11,6 +12,51 @@
 #include <cstring>
 
 namespace {
+
+int shortestPathLength(const MazeModel &maze) {
+    QVector<int> distance(maze.cellCount(), -1);
+    QQueue<int> queue;
+    distance[maze.startCell()] = 0;
+    queue.enqueue(maze.startCell());
+    while (!queue.isEmpty()) {
+        const int current = queue.dequeue();
+        for (int next : maze.neighbors(current)) {
+            if (distance[next] >= 0) {
+                continue;
+            }
+            distance[next] = distance[current] + 1;
+            queue.enqueue(next);
+        }
+    }
+    return distance[maze.endCell()];
+}
+
+int longestInternalWallRun(const MazeModel &maze) {
+    const QStringList grid = maze.expandedGrid();
+    int longest = 0;
+    auto measure = [&](const QString &line) {
+        int current = 0;
+        for (int i = 1; i + 1 < line.size(); ++i) {
+            if (line[i] == QLatin1Char('#')) {
+                longest = std::max(longest, ++current);
+            } else {
+                current = 0;
+            }
+        }
+    };
+    for (int row = 1; row + 1 < grid.size(); ++row) {
+        measure(grid[row]);
+    }
+    for (int column = 1; column + 1 < grid.first().size(); ++column) {
+        QString vertical;
+        vertical.reserve(grid.size());
+        for (const QString &line : grid) {
+            vertical.append(line[column]);
+        }
+        measure(vertical);
+    }
+    return longest;
+}
 
 int runSelfTests() {
     QTextStream output(stdout);
@@ -54,7 +100,27 @@ int runSelfTests() {
             return 4;
         }
         output << "PASS maze algorithm " << i << ": " << reason
+               << ", route=" << shortestPathLength(maze)
+               << ", wall-run=" << longestInternalWallRun(maze)
                << ", resource=" << plan.maxValue << '\n';
+    }
+
+    const int directDistance = 15 + 15 - 2;
+    for (quint32 seed : {202506U, 7U, 42U, 1003U, 65537U}) {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::BreadthFirstSearch, seed);
+        QString reason;
+        const int routeLength = shortestPathLength(maze);
+        const int wallRun = longestInternalWallRun(maze);
+        if (!maze.validatePerfect(&reason) || routeLength <= directDistance
+            || wallRun > 17) {
+            output << "FAIL BFS maze quality for seed " << seed
+                   << ": route=" << routeLength << ", wall-run=" << wallRun
+                   << ", " << reason << '\n';
+            return 6;
+        }
+        output << "PASS BFS quality seed " << seed << ": route=" << routeLength
+               << ", wall-run=" << wallRun << '\n';
     }
 
     const QVector<int> bosses{35, 45, 60};

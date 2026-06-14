@@ -68,7 +68,7 @@ void MainWindow::buildUi() {
     algorithmBox_->addItems({QStringLiteral("分治"),
                              QStringLiteral("贪心 / Kruskal 最小生成树"),
                              QStringLiteral("回溯 / DFS"),
-                             QStringLiteral("分支限界 / BFS")});
+                             QStringLiteral("分支限界 / 随机代价 BFS")});
     rowsSpin_ = new QSpinBox;
     rowsSpin_->setRange(5, 31);
     rowsSpin_->setValue(15);
@@ -106,7 +106,7 @@ void MainWindow::buildUi() {
         QStringLiteral("分治：递归拆分矩形区域，每次只连接两个子迷宫一次。时间 O(V)，递归空间 O(log V)（均衡时），结构分区明显。"),
         QStringLiteral("Kruskal MST：随机边排序并用并查集防环。时间 O(E log E)，空间 O(V+E)，分支较均衡。"),
         QStringLiteral("回溯 DFS：深入未访问邻格，遇到死路回退。时间 O(V+E)，空间 O(V)，长走廊较多。"),
-        QStringLiteral("BFS 分支限界：按层扩展，visited 集合剪去重复与成环分支。时间 O(V+E)，空间 O(V)，起点附近分支密集。")};
+        QStringLiteral("BFS 分支限界：优先队列按深度下界扩展，每次只接受一条候选边；随机代价打散同层分支，visited 剪去重复与成环状态。时间 O(E log E)，空间 O(E)，形态更接近标准迷宫。")};
     auto updateComplexity = [=](int index) {
         complexityLabel->setText(complexityDescriptions.value(index));
     };
