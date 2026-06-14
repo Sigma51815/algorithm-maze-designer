@@ -100,10 +100,10 @@ void MainWindow::buildUi() {
     animationSpin_->setValue(12);
     animationSpin_->setSuffix(QStringLiteral(" ms"));
     generationForm->addRow(QStringLiteral("算法"), algorithmBox_);
-    generationForm->addRow(QStringLiteral("矩阵行数"), rowsSpin_);
-    generationForm->addRow(QStringLiteral("矩阵列数"), columnsSpin_);
+    generationForm->addRow(QStringLiteral("行数"), rowsSpin_);
+    generationForm->addRow(QStringLiteral("列数"), columnsSpin_);
     generationForm->addRow(QStringLiteral("种子"), seedSpin_);
-    generationForm->addRow(QStringLiteral("动画速度"), animationSpin_);
+    generationForm->addRow(QStringLiteral("速度"), animationSpin_);
     generationLayout->addLayout(generationForm);
 
     auto *generateButton = new QPushButton(QStringLiteral("生成并播放过程"));
@@ -181,11 +181,12 @@ void MainWindow::buildUi() {
     bossHealthEdit_ = new QLineEdit(QStringLiteral("11,13,9,15"));
     bossHealthEdit_->setObjectName(QStringLiteral("inputControl"));
     bossHealthEdit_->setPlaceholderText(QStringLiteral("如 35,45,60"));
+    bossHealthEdit_->setToolTip(QStringLiteral("各 BOSS 血量，逗号分隔"));
     skillsEdit_ = new QLineEdit(
         QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
     skillsEdit_->setObjectName(QStringLiteral("inputControl"));
-    skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却"));
-    skillsEdit_->setToolTip(QStringLiteral("格式：名称:伤害:冷却；至少一个技能冷却为 0"));
+    skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却;..."));
+    skillsEdit_->setToolTip(QStringLiteral("如 普通攻击:5:0;重击:10:2"));
     extraTurnsSpin_ = new QSpinBox;
     extraTurnsSpin_->setObjectName(QStringLiteral("inputControl"));
     extraTurnsSpin_->setRange(1, 9999);
@@ -194,10 +195,10 @@ void MainWindow::buildUi() {
     reviveCostSpin_->setObjectName(QStringLiteral("inputControl"));
     reviveCostSpin_->setRange(0, 1000);
     reviveCostSpin_->setValue(5);
-    bossForm->addRow(QStringLiteral("BOSS 血量"), bossHealthEdit_);
+    bossForm->addRow(QStringLiteral("血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能"), skillsEdit_);
-    bossForm->addRow(QStringLiteral("限定回合"), extraTurnsSpin_);
-    bossForm->addRow(QStringLiteral("复活金币"), reviveCostSpin_);
+    bossForm->addRow(QStringLiteral("回合"), extraTurnsSpin_);
+    bossForm->addRow(QStringLiteral("复活"), reviveCostSpin_);
     bossLayout->addLayout(bossForm);
     auto *bossButtons = new QHBoxLayout;
     bossButtons->setSpacing(8);
@@ -211,8 +212,8 @@ void MainWindow::buildUi() {
     bossOutput_ = new QPlainTextEdit;
     bossOutput_->setObjectName(QStringLiteral("outputConsole"));
     bossOutput_->setReadOnly(true);
-    bossOutput_->setMaximumHeight(120);
-    bossOutput_->setPlaceholderText(QStringLiteral("求解结果..."));
+    bossOutput_->setMaximumHeight(140);
+    bossOutput_->setPlaceholderText(QStringLiteral("点击「求解最优序列」查看结果"));
     bossLayout->addWidget(bossOutput_);
     panelLayout->addWidget(bossGroup);
     connect(solveBossButton, &QPushButton::clicked, this, &MainWindow::solveBossBattle);
@@ -519,8 +520,15 @@ void MainWindow::solveBossBattle() {
         sequenceNames.append(skills[skillIndex].name);
     }
     bossOutput_->setPlainText(
-        QStringLiteral("最少回合数：%1\n限定回合数：%2\n复活金币：%3\n"
-                       "最优序列：%4\n搜索：%5 展开 / %6 剪枝")
+        QStringLiteral(
+            "── 求解结果 ──────────────────────\n"
+            "最少回合数    %1\n"
+            "限定回合数    %2\n"
+            "复活金币      %3\n"
+            "────────────────────────────────\n"
+            "最优序列      %4\n"
+            "────────────────────────────────\n"
+            "搜索展开 %5    剪枝 %6")
             .arg(lastBossResult_.minimumTurns)
             .arg(extraTurnsSpin_->value())
             .arg(reviveCostSpin_->value())
