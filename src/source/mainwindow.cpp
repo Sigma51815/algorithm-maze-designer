@@ -3,6 +3,7 @@
 #include "ai/aiplayerformat.h"
 #include "battlewindow.h"
 #include "maze_optimizer.h"
+#include "maze_saver.h"
 #include "mazewidget.h"
 
 #include <QCheckBox>
@@ -30,6 +31,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <limits>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     buildUi();
@@ -311,14 +313,23 @@ void MainWindow::buildUi() {
     optResultLabel_->setWordWrap(true);
     optResultLabel_->setVisible(false);
     optLayout->addWidget(optResultLabel_);
+    auto *optButtonRow = new QHBoxLayout;
+    optButtonRow->setSpacing(8);
     auto *applyOptButton = new QPushButton(QStringLiteral("应用优化迷宫"));
     applyOptButton->setObjectName(QStringLiteral("accentButton"));
     applyOptButton->setEnabled(false);
     optApplyButton_ = applyOptButton;
-    optLayout->addWidget(applyOptButton);
+    auto *saveOptButton = new QPushButton(QStringLiteral("保存最佳迷宫"));
+    saveOptButton->setObjectName(QStringLiteral("secondaryButton"));
+    saveOptButton->setEnabled(false);
+    optSaveButton_ = saveOptButton;
+    optButtonRow->addWidget(applyOptButton);
+    optButtonRow->addWidget(saveOptButton);
+    optLayout->addLayout(optButtonRow);
     panelLayout->addWidget(optGroup);
     connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
     connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
+    connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
 
     auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家 JSON"));
     exportButton->setObjectName(QStringLiteral("secondaryButton"));
@@ -788,22 +799,38 @@ void MainWindow::runOptimizer() {
     connect(optStopButton_, &QPushButton::clicked, optimizer, &MazeOptimizer::stop);
 
     connect(optimizer, &MazeOptimizer::finished, this,
-            [this, thread, optimizer](const MazeModel &bestMaze) {
+            [this, thread, optimizer, cfg](const MazeModel &bestMaze) {
                 optimizedMaze_ = bestMaze;
                 hasOptimizedMaze_ = true;
+                lastOptConfig_ = cfg;
                 optRunButton_->setEnabled(true);
                 optStopButton_->setEnabled(false);
                 optApplyButton_->setEnabled(true);
+                optSaveButton_->setEnabled(true);
 
                 ResourcePlan dp = optimizedMaze_.optimalResourceWalk();
-                PlayResult greedy = GreedyPlayer::play(optimizedMaze_);
+                int worstGreedy = std::numeric_limits<int>::max();
+                const QVector<GreedyStrategy> strategies = {
+                    GreedyStrategy::ValuePerStep,
+                    GreedyStrategy::NearestFirst,
+                    GreedyStrategy::AvoidTraps,
+                    GreedyStrategy::EndGoalFirst
+                };
+                for (GreedyStrategy s : strategies) {
+                    PlayResult result = GreedyPlayer::play(optimizedMaze_, {}, {}, 0, s);
+                    worstGreedy = std::min(worstGreedy, result.remainingResource);
+                }
+                lastOptDpScore_ = dp.maxValue;
+                lastOptGreedyScore_ = worstGreedy;
+                lastOptFitness_ = dp.maxValue - worstGreedy;
+
                 optResultLabel_->setText(
                     QStringLiteral("<b>优化完成</b>  |  Regret = %1<br/>"
                                    "DP最优 %2  |  Greedy %3  |  差距 %4")
-                        .arg(dp.maxValue - greedy.remainingResource)
-                        .arg(dp.maxValue)
-                        .arg(greedy.remainingResource)
-                        .arg(dp.maxValue - greedy.remainingResource));
+                        .arg(lastOptFitness_)
+                        .arg(lastOptDpScore_)
+                        .arg(lastOptGreedyScore_)
+                        .arg(lastOptFitness_));
                 optResultLabel_->setVisible(true);
                 thread->quit();
             });
@@ -831,4 +858,28 @@ void MainWindow::applyOptimizedMaze() {
     mazeWidget_->setRevealCount(revealedEdges_);
     updateValidation();
     statusBar()->showMessage(QStringLiteral("已应用遗传优化迷宫"), 5000);
+}
+
+void MainWindow::saveOptimizedMaze() {
+    if (!hasOptimizedMaze_) {
+        return;
+    }
+    const QString defaultName = QStringLiteral("ga_maze_%1x%2_f%3.json")
+                                    .arg(lastOptConfig_.rows)
+                                    .arg(lastOptConfig_.columns)
+                                    .arg(lastOptFitness_);
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("保存最佳优化迷宫"), defaultName,
+        QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (MazeSaver::saveGAResult(path, optimizedMaze_, lastOptConfig_,
+                                lastOptFitness_, lastOptDpScore_,
+                                lastOptGreedyScore_)) {
+        statusBar()->showMessage(QStringLiteral("已保存最佳迷宫：%1").arg(path), 5000);
+    } else {
+        QMessageBox::critical(this, QStringLiteral("保存失败"),
+                              QStringLiteral("无法写入文件：%1").arg(path));
+    }
 }

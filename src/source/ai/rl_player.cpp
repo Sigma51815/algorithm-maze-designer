@@ -1,6 +1,12 @@
 #include "ai/rl_player.h"
 
+#include <QDateTime>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQueue>
+#include <QSaveFile>
 #include <QSet>
 
 #include <algorithm>
@@ -20,6 +26,75 @@ void RLPlayer::resetQTable() {
             val = 0.0;
         }
     }
+}
+
+bool RLPlayer::saveQTable(const QString &path, const RLConfig &config) const {
+    QJsonObject json;
+    json["format"] = QStringLiteral("rl-qtable-v1");
+    json["stateSize"] = StateSize;
+    json["actionCount"] = ActionCount;
+    json["trainEpisodes"] = config.trainEpisodes;
+    json["alpha"] = config.alpha;
+    json["gamma"] = config.gamma;
+    json["epsilonStart"] = config.epsilonStart;
+    json["epsilonEnd"] = config.epsilonEnd;
+    json["epsilonDecay"] = config.epsilonDecay;
+    json["coinCount"] = config.coinCount;
+    json["trapCount"] = config.trapCount;
+    json["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+    QJsonArray tableArray;
+    for (int i = 0; i < StateSize; ++i) {
+        for (int j = 0; j < ActionCount; ++j) {
+            tableArray.append(qTable_[i][j]);
+        }
+    }
+    json["qTable"] = tableArray;
+
+    QJsonDocument doc(json);
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    file.write(doc.toJson(QJsonDocument::Compact));
+    return file.commit();
+}
+
+bool RLPlayer::loadQTable(const QString &path, RLConfig &config) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+        return false;
+    }
+    QJsonObject json = doc.object();
+    if (json["format"].toString() != QStringLiteral("rl-qtable-v1")) {
+        return false;
+    }
+    if (json["stateSize"].toInt() != StateSize) {
+        return false;
+    }
+
+    config.trainEpisodes = json["trainEpisodes"].toInt();
+    config.alpha = json["alpha"].toDouble();
+    config.gamma = json["gamma"].toDouble();
+    config.epsilonStart = json["epsilonStart"].toDouble();
+    config.epsilonEnd = json["epsilonEnd"].toDouble();
+    config.epsilonDecay = json["epsilonDecay"].toDouble();
+    config.coinCount = json["coinCount"].toInt(config.coinCount);
+    config.trapCount = json["trapCount"].toInt(config.trapCount);
+
+    QJsonArray tableArray = json["qTable"].toArray();
+    int idx = 0;
+    for (int i = 0; i < StateSize && idx < tableArray.size(); ++i) {
+        for (int j = 0; j < ActionCount && idx < tableArray.size(); ++j) {
+            qTable_[i][j] = tableArray[idx++].toDouble();
+        }
+    }
+    return true;
 }
 
 int RLPlayer::encodeState(const MazeModel &maze, int cell, const QSet<int> &visited) const {

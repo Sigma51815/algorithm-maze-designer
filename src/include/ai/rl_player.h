@@ -34,6 +34,9 @@ public:
     RLPlayResult play(const MazeModel &maze, const RLConfig &config) const;
     void resetQTable();
 
+    bool saveQTable(const QString &path, const RLConfig &config) const;
+    bool loadQTable(const QString &path, RLConfig &config);
+
     static QVector<MazeModel> generateDiverseMazes(int count, quint32 baseSeed);
     static QVector<MazeModel> generateEasyMazes(int count, quint32 baseSeed);
     static QVector<MazeModel> generateHardMazes(int count, quint32 baseSeed);
