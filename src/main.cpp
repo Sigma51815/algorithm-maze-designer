@@ -61,17 +61,52 @@ int runSelfTests() {
         MazeModel maze;
         maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 42);
         maze.placeResources(10, 5, 43);
+
+        if (!maze.hasBoss()) {
+            output << "FAIL hasBoss should be true after generate\n";
+            return 6;
+        }
+        if (maze.bossCell() == maze.endCell()) {
+            output << "FAIL bossCell should differ from endCell\n";
+            return 6;
+        }
+        if (maze.bossCell() == maze.startCell()) {
+            output << "FAIL bossCell should differ from startCell\n";
+            return 6;
+        }
+
         const QStringList grid = maze.compactGrid();
         if (grid.size() != 31) {
             output << "FAIL compactGrid row count: " << grid.size() << '\n';
             return 6;
         }
+        bool foundB = false, foundE = false;
         for (const QString &row : grid) {
             if (row.size() != 31) {
                 output << "FAIL compactGrid col count: " << row.size() << '\n';
                 return 6;
             }
+            if (row.contains(QLatin1Char('B'))) foundB = true;
+            if (row.contains(QLatin1Char('E'))) foundE = true;
         }
+        if (!foundB || !foundE) {
+            output << "FAIL compactGrid missing B or E marker (B=" << foundB << " E=" << foundE << ")\n";
+            return 6;
+        }
+
+        const int coinCell = [&]() {
+            for (int c = 0; c < maze.cellCount(); ++c)
+                if (maze.resourceAt(c) > 0) return c;
+            return -1;
+        }();
+        if (coinCell >= 0) {
+            maze.consumeResource(coinCell);
+            if (maze.resourceAt(coinCell) != 0) {
+                output << "FAIL consumeResource did not clear cell " << coinCell << '\n';
+                return 6;
+            }
+        }
+
         const QVector<BossSkill> testSkills{{QStringLiteral("Normal"), 5, 0},
                                              {QStringLiteral("Heavy"), 10, 2}};
         const QJsonObject crossJson = maze.toCrossTestJson({35, 45}, testSkills, 20, 100);
@@ -83,7 +118,7 @@ int runSelfTests() {
             output << "FAIL cross-test JSON missing fields\n";
             return 7;
         }
-        output << "PASS cross-test JSON format\n";
+        output << "PASS cross-test JSON format (B=" << maze.bossCell() << " E=" << maze.endCell() << ")\n";
     }
 
     const QVector<int> bosses{35, 45, 60};

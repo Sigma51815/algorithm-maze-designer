@@ -57,6 +57,8 @@ quint64 edgeKey(int first, int second) {
 void MazeModel::reset(int rows, int columns, quint32 seed) {
     rows_ = std::max(2, rows);
     columns_ = std::max(2, columns);
+    bossCell_ = -1;
+    hasBoss_ = false;
     passages_.fill({false, false, false, false}, cellCount());
     resources_.fill(0, cellCount());
     generationSteps_.clear();
@@ -79,6 +81,24 @@ void MazeModel::generate(int rows, int columns, MazeAlgorithm algorithm, quint32
         generateBreadthFirst();
         break;
     }
+
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> q;
+    q.enqueue(startCell());
+    parent[startCell()] = startCell();
+    while (!q.isEmpty() && parent[endCell()] < 0) {
+        int cur = q.dequeue();
+        for (int next : neighbors(cur)) {
+            if (parent[next] < 0) {
+                parent[next] = cur;
+                q.enqueue(next);
+            }
+        }
+    }
+    for (int cell = endCell(); parent[cell] != startCell(); cell = parent[cell]) {
+        bossCell_ = cell;
+    }
+    hasBoss_ = true;
 }
 
 QVector<int> MazeModel::gridNeighbors(int cell) const {
@@ -258,6 +278,9 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     resources_.fill(0, cellCount());
     QVector<int> available;
     for (int cell = 1; cell < endCell(); ++cell) {
+        if (cell == bossCell_) {
+            continue;
+        }
         available.append(cell);
     }
     std::mt19937 engine(seed);
@@ -270,6 +293,19 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     }
     for (int i = coinCount; i < coinCount + trapCount; ++i) {
         resources_[available[i]] = -30;
+    }
+}
+
+void MazeModel::setBossCell(int cell) {
+    if (cell >= 0 && cell < cellCount() && cell != startCell() && cell != endCell()) {
+        bossCell_ = cell;
+        hasBoss_ = true;
+    }
+}
+
+void MazeModel::consumeResource(int cell) {
+    if (cell >= 0 && cell < cellCount()) {
+        resources_[cell] = 0;
     }
 }
 
@@ -420,6 +456,8 @@ QStringList MazeModel::expandedGrid() const {
         QChar marker = QLatin1Char('.');
         if (cell == startCell()) {
             marker = QLatin1Char('S');
+        } else if (hasBoss_ && cell == bossCell_) {
+            marker = QLatin1Char('B');
         } else if (cell == endCell()) {
             marker = QLatin1Char('E');
         } else if (resourceAt(cell) > 0) {
@@ -501,6 +539,8 @@ QStringList MazeModel::compactGrid() const {
         QChar marker = QLatin1Char(' ');
         if (cell == startCell()) {
             marker = QLatin1Char('S');
+        } else if (hasBoss_ && cell == bossCell_) {
+            marker = QLatin1Char('B');
         } else if (cell == endCell()) {
             marker = QLatin1Char('E');
         } else if (resourceAt(cell) > 0) {

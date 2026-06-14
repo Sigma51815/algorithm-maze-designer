@@ -37,7 +37,11 @@ public:
     [[nodiscard]] int cellCount() const { return rows_ * columns_; }
     [[nodiscard]] int startCell() const { return 0; }
     [[nodiscard]] int endCell() const { return cellCount() - 1; }
+    [[nodiscard]] int bossCell() const { return bossCell_; }
+    [[nodiscard]] bool hasBoss() const { return hasBoss_; }
+    void setBossCell(int cell);
     [[nodiscard]] int resourceAt(int cell) const;
+    void consumeResource(int cell);
     [[nodiscard]] bool isOpen(int first, int second) const;
     [[nodiscard]] QVector<int> neighbors(int cell) const;
     [[nodiscard]] const QVector<MazeEdge> &generationSteps() const { return generationSteps_; }
@@ -60,6 +64,8 @@ private:
 
     int rows_ = 0;
     int columns_ = 0;
+    int bossCell_ = -1;
+    bool hasBoss_ = false;
     QVector<std::array<bool, 4>> passages_;
     QVector<int> resources_;
     QVector<MazeEdge> generationSteps_;
