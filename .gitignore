@@ -39,3 +39,6 @@ Thumbs.db
 *.exe
 *.app
 *.tmp
+
+# MiMoCode
+.mimocode/
