@@ -429,7 +429,9 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     }
     remaining += branchCells;
     std::shuffle(remaining.begin(), remaining.end(), engine);
-    for (int i = 0; i < trapCount - mainPathTrapCount; ++i) {
+    const int remainingTraps = std::min(trapCount - mainPathTrapCount,
+                                         static_cast<int>(remaining.size()));
+    for (int i = 0; i < remainingTraps; ++i) {
         resources_[remaining.takeLast()] = -30;
     }
 
@@ -444,6 +446,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
             coinCandidates.append(cell);
         }
     }
+    coinCount = std::min(coinCount, static_cast<int>(coinCandidates.size()));
     for (int i = 0; i < coinCount; ++i) {
         resources_[coinCandidates[i]] = 50;
     }

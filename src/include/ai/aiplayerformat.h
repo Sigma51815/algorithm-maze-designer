@@ -1,7 +1,7 @@
 #pragma once
 
-#include "include/bosssolver.h"
-#include "include/maze.h"
+#include "bosssolver.h"
+#include "maze.h"
 
 #include <QJsonObject>
 #include <QByteArray>

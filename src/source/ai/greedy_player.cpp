@@ -31,23 +31,20 @@ QVector<int> bfsPath(const MazeModel &maze, int from, int to) {
     return {};
 }
 
-QVector<int> bfsReachable(const MazeModel &maze, int from,
-                          const QSet<int> &exclude) {
+QVector<int> bfsDistances(const MazeModel &maze, int from) {
     QVector<int> dist(maze.cellCount(), -1);
     QQueue<int> queue;
     dist[from] = 0;
     queue.enqueue(from);
-    QVector<int> result;
     while (!queue.isEmpty()) {
         int cur = queue.dequeue();
-        if (!exclude.contains(cur)) result.append(cur);
         for (int nb : maze.neighbors(cur)) {
             if (dist[nb] >= 0) continue;
             dist[nb] = dist[cur] + 1;
             queue.enqueue(nb);
         }
     }
-    return result;
+    return dist;
 }
 
 } // namespace
@@ -68,46 +65,21 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
     result.walk.append(pos);
 
     while (result.totalSteps < maxSteps) {
-        if (pos == maze.bossCell() && !bossHealth.isEmpty()
-            && !bossSkills.isEmpty()) {
-            BossResult bossResult = BossSolver::solve(bossHealth, bossSkills);
-            if (bossResult.solved) {
-                result.bossDefeated = true;
-                result.bossAttempts = 1;
-            }
-        }
-
         if (pos == maze.endCell()) {
             result.reachedEnd = true;
             break;
         }
 
-        QVector<int> reachable = bfsReachable(maze, pos, visitedResources);
+        const QVector<int> dist = bfsDistances(maze, pos);
         int target = -1;
         double bestScore = -1.0;
-        for (int cell : reachable) {
+        for (int cell = 0; cell < maze.cellCount(); ++cell) {
             if (cell == pos) continue;
-            int val = maze.resourceAt(cell);
-            if (val == 0) continue;
             if (visitedResources.contains(cell)) continue;
-            int dist = 0;
-            {
-                QVector<int> d(maze.cellCount(), -1);
-                QQueue<int> q;
-                d[pos] = 0;
-                q.enqueue(pos);
-                while (!q.isEmpty()) {
-                    int c = q.dequeue();
-                    if (c == cell) { dist = d[c]; break; }
-                    for (int nb : maze.neighbors(c)) {
-                        if (d[nb] >= 0) continue;
-                        d[nb] = d[c] + 1;
-                        q.enqueue(nb);
-                    }
-                }
-            }
-            if (dist <= 0) continue;
-            double sc = static_cast<double>(val) / dist;
+            int val = maze.resourceAt(cell);
+            if (val <= 0) continue;
+            if (dist[cell] <= 0) continue;
+            double sc = static_cast<double>(val) / dist[cell];
             if (sc > bestScore) {
                 bestScore = sc;
                 target = cell;
