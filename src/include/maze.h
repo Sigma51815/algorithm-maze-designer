@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QJsonObject>
 #include <QString>
 #include <QVector>
 
@@ -42,6 +41,7 @@ public:
     [[nodiscard]] int cellCount() const { return rows_ * columns_; }
     [[nodiscard]] int startCell() const { return startCell_; }
     [[nodiscard]] int endCell() const { return endCell_; }
+    [[nodiscard]] int bossCell() const { return bossCell_; }
     [[nodiscard]] int resourceAt(int cell) const;
     [[nodiscard]] bool isOpen(int first, int second) const;
     [[nodiscard]] QVector<int> neighbors(int cell) const;
@@ -51,7 +51,6 @@ public:
     [[nodiscard]] MazeStatistics statistics() const;
     [[nodiscard]] ResourcePlan optimalResourceWalk() const;
     [[nodiscard]] QStringList expandedGrid() const;
-    [[nodiscard]] QJsonObject toJson() const;
 
 private:
     static constexpr int Up = 0;
@@ -63,6 +62,7 @@ private:
     int columns_ = 0;
     int startCell_ = 0;
     int endCell_ = 0;
+    int bossCell_ = 0;
     QVector<std::array<bool, 4>> passages_;
     QVector<int> resources_;
     QVector<MazeEdge> generationSteps_;

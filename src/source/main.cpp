@@ -1,3 +1,4 @@
+#include "aiplayerformat.h"
 #include "bosssolver.h"
 #include "battlewindow.h"
 #include "mainwindow.h"
@@ -5,9 +6,12 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QQueue>
 #include <QPushButton>
 #include <QSet>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QTimer>
 
@@ -266,6 +270,57 @@ int runSelfTests() {
     output << "PASS boss solver: turns=" << bossResult.minimumTurns
            << ", expanded=" << bossResult.expandedStates
            << ", pruned=" << bossResult.prunedStates << '\n';
+
+    MazeModel contractMaze;
+    contractMaze.generate(7, 7, MazeAlgorithm::KruskalMst, 202506U);
+    contractMaze.placeResources(8, 6, 202507U);
+    const QJsonObject contract = buildAiPlayerInput(
+        contractMaze, bosses, skills, bossResult.minimumTurns + 2, 5);
+    const QSet<QString> expectedKeys{QStringLiteral("maze"), QStringLiteral("B"),
+                                     QStringLiteral("PlayerSkills"),
+                                     QStringLiteral("minRouds"),
+                                     QStringLiteral("CoinConsumption")};
+    QSet<QString> actualKeys;
+    for (const QString &key : contract.keys()) {
+        actualKeys.insert(key);
+    }
+    if (actualKeys != expectedKeys) {
+        output << "FAIL AI JSON keys\n";
+        return 9;
+    }
+    const QJsonArray matrix = contract.value(QStringLiteral("maze")).toArray();
+    int startMarkers = 0;
+    int endMarkers = 0;
+    int bossMarkers = 0;
+    bool matrixValid = matrix.size() == 15;
+    for (const QJsonValue &rowValue : matrix) {
+        const QJsonArray row = rowValue.toArray();
+        matrixValid = matrixValid && row.size() == 15;
+        for (const QJsonValue &cellValue : row) {
+            const QString cell = cellValue.toString();
+            matrixValid = matrixValid && cell.size() == 1 && cell != QStringLiteral(".");
+            startMarkers += cell == QStringLiteral("S");
+            endMarkers += cell == QStringLiteral("E");
+            bossMarkers += cell == QStringLiteral("B");
+        }
+    }
+    if (!matrixValid || startMarkers != 1 || endMarkers != 1 || bossMarkers != 1
+        || contract.value(QStringLiteral("B")).toArray().size() != bosses.size()
+        || contract.value(QStringLiteral("PlayerSkills")).toArray().size() != skills.size()) {
+        output << "FAIL AI JSON contract\n";
+        return 10;
+    }
+    const QByteArray previewPath = qgetenv("AI_JSON_PREVIEW_PATH");
+    if (!previewPath.isEmpty()) {
+        QSaveFile preview(QString::fromLocal8Bit(previewPath));
+        if (!preview.open(QIODevice::WriteOnly)
+            || preview.write(QJsonDocument(contract).toJson(QJsonDocument::Indented)) < 0
+            || !preview.commit()) {
+            output << "FAIL writing AI JSON preview\n";
+            return 11;
+        }
+    }
+    output << "PASS AI JSON contract: 15x15, unique S/E/B, exact fields\n";
     output << "ALL TESTS PASSED\n";
     return 0;
 }

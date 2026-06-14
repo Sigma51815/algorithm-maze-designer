@@ -1,6 +1,5 @@
 #include "maze.h"
 
-#include <QJsonArray>
 #include <QQueue>
 #include <QSet>
 
@@ -45,14 +44,6 @@ private:
     QVector<int> rank_;
 };
 
-quint64 edgeKey(int first, int second) {
-    if (first > second) {
-        std::swap(first, second);
-    }
-    return (static_cast<quint64>(static_cast<quint32>(first)) << 32)
-        | static_cast<quint32>(second);
-}
-
 } // namespace
 
 void MazeModel::reset(int rows, int columns, quint32 seed) {
@@ -63,6 +54,7 @@ void MazeModel::reset(int rows, int columns, quint32 seed) {
     generationSteps_.clear();
     startCell_ = 0;
     endCell_ = cellCount() - 1;
+    bossCell_ = endCell_;
     random_.seed(seed);
 }
 
@@ -110,6 +102,23 @@ void MazeModel::chooseDiameterEndpoints() {
 
     startCell_ = farthestFrom(0);
     endCell_ = farthestFrom(startCell_);
+
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> queue;
+    parent[startCell_] = startCell_;
+    queue.enqueue(startCell_);
+    while (!queue.isEmpty() && parent[endCell_] < 0) {
+        const int current = queue.dequeue();
+        for (int next : neighbors(current)) {
+            if (parent[next] < 0) {
+                parent[next] = current;
+                queue.enqueue(next);
+            }
+        }
+    }
+    bossCell_ = parent[endCell_] >= 0 && parent[endCell_] != startCell_
+        ? parent[endCell_]
+        : endCell_;
 }
 
 QVector<int> MazeModel::gridNeighbors(int cell) const {
@@ -384,7 +393,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     QVector<int> mainPathCells;
     QVector<int> branchCells;
     for (int cell = 0; cell < cellCount(); ++cell) {
-        if (cell == startCell() || cell == endCell()) {
+        if (cell == startCell() || cell == endCell() || cell == bossCell()) {
             continue;
         }
         (onMainPath[cell] ? mainPathCells : branchCells).append(cell);
@@ -392,7 +401,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     std::shuffle(mainPathCells.begin(), mainPathCells.end(), engine);
     std::shuffle(branchCells.begin(), branchCells.end(), engine);
 
-    const int availableCount = cellCount() - 2;
+    const int availableCount = std::max(0, cellCount() - 3);
     coinCount = std::clamp(coinCount, 0, availableCount);
     trapCount = std::clamp(trapCount, 0, availableCount - coinCount);
 
@@ -624,11 +633,13 @@ QStringList MazeModel::expandedGrid() const {
     for (int cell = 0; cell < cellCount(); ++cell) {
         const int gridRow = rowOf(cell) * 2 + 1;
         const int gridColumn = columnOf(cell) * 2 + 1;
-        QChar marker = QLatin1Char('.');
+        QChar marker = QLatin1Char(' ');
         if (cell == startCell()) {
             marker = QLatin1Char('S');
         } else if (cell == endCell()) {
             marker = QLatin1Char('E');
+        } else if (cell == bossCell()) {
+            marker = QLatin1Char('B');
         } else if (resourceAt(cell) > 0) {
             marker = QLatin1Char('G');
         } else if (resourceAt(cell) < 0) {
@@ -639,64 +650,8 @@ QStringList MazeModel::expandedGrid() const {
             const int nextGridRow = rowOf(next) * 2 + 1;
             const int nextGridColumn = columnOf(next) * 2 + 1;
             grid[(gridRow + nextGridRow) / 2][(gridColumn + nextGridColumn) / 2]
-                = QLatin1Char('.');
+                = QLatin1Char(' ');
         }
     }
     return grid;
-}
-
-QJsonObject MazeModel::toJson() const {
-    QJsonObject object;
-    object.insert(QStringLiteral("format"), QStringLiteral("algorithm-maze-v1"));
-    object.insert(QStringLiteral("rows"), rows_);
-    object.insert(QStringLiteral("columns"), columns_);
-    object.insert(QStringLiteral("startCell"), startCell());
-    object.insert(QStringLiteral("endCell"), endCell());
-    object.insert(QStringLiteral("bossAtCell"), endCell());
-    const MazeStatistics stats = statistics();
-    QJsonObject statisticsObject;
-    statisticsObject.insert(QStringLiteral("solutionLength"), stats.solutionLength);
-    statisticsObject.insert(QStringLiteral("deadEnds"), stats.deadEnds);
-    statisticsObject.insert(QStringLiteral("junctions"), stats.junctions);
-    statisticsObject.insert(QStringLiteral("longestCorridor"), stats.longestCorridor);
-    object.insert(QStringLiteral("statistics"), statisticsObject);
-
-    QJsonArray gridArray;
-    for (const QString &line : expandedGrid()) {
-        gridArray.append(line);
-    }
-    object.insert(QStringLiteral("expandedMatrix"), gridArray);
-
-    QJsonArray edgeArray;
-    QSet<quint64> emitted;
-    for (int cell = 0; cell < cellCount(); ++cell) {
-        for (int next : neighbors(cell)) {
-            const quint64 key = edgeKey(cell, next);
-            if (emitted.contains(key)) {
-                continue;
-            }
-            emitted.insert(key);
-            QJsonArray edge;
-            edge.append(cell);
-            edge.append(next);
-            edgeArray.append(edge);
-        }
-    }
-    object.insert(QStringLiteral("passages"), edgeArray);
-
-    QJsonArray resourceArray;
-    for (int cell = 0; cell < cellCount(); ++cell) {
-        if (resourceAt(cell) == 0) {
-            continue;
-        }
-        QJsonObject resource;
-        resource.insert(QStringLiteral("cell"), cell);
-        resource.insert(QStringLiteral("value"), resourceAt(cell));
-        resource.insert(QStringLiteral("type"),
-                        resourceAt(cell) > 0 ? QStringLiteral("coin")
-                                             : QStringLiteral("trap"));
-        resourceArray.append(resource);
-    }
-    object.insert(QStringLiteral("resources"), resourceArray);
-    return object;
 }

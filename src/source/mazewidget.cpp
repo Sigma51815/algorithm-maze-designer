@@ -95,6 +95,8 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     painter.drawRoundedRect(QRectF(originX, originY, boardWidth, boardHeight), 4, 4);
     painter.setBrush(QColor("#dff4e8"));
     painter.drawRect(rectOf(maze_.startCell()));
+    painter.setBrush(QColor("#eee3ff"));
+    painter.drawRect(rectOf(maze_.bossCell()));
     painter.setBrush(QColor("#fde7e7"));
     painter.drawRect(rectOf(maze_.endCell()));
 
@@ -163,6 +165,8 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     painter.setFont(labelFont);
     painter.setPen(QColor("#17613a"));
     painter.drawText(rectOf(maze_.startCell()), Qt::AlignCenter, QStringLiteral("S"));
+    painter.setPen(QColor("#6d43a8"));
+    painter.drawText(rectOf(maze_.bossCell()), Qt::AlignCenter, QStringLiteral("B"));
     painter.setPen(QColor("#9a2630"));
     painter.drawText(rectOf(maze_.endCell()), Qt::AlignCenter, QStringLiteral("E"));
 }

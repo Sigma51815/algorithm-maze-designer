@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include "aiplayerformat.h"
 #include "battlewindow.h"
 #include "mazewidget.h"
 
@@ -56,7 +57,7 @@ void MainWindow::buildUi() {
     panelLayout->addWidget(title);
 
     auto *legend = new QLabel(QStringLiteral(
-        "S 起点  E 终点/BOSS（自动选择迷宫直径两端）  ● 金币(+50)  ▲ 陷阱(-30)\n"
+        "S 起点  B 独立 BOSS 格  E 终点  ● 金币(+50)  ▲ 陷阱(-30)\n"
         "蓝线为动态规划得到的最优资源收集行走路径。"));
     legend->setWordWrap(true);
     legend->setStyleSheet(QStringLiteral("color:#52616b;"));
@@ -72,9 +73,11 @@ void MainWindow::buildUi() {
                              QStringLiteral("分支限界 / 严格分层 BFS")});
     rowsSpin_ = new QSpinBox;
     rowsSpin_->setRange(5, 31);
+    rowsSpin_->setSingleStep(2);
     rowsSpin_->setValue(15);
     columnsSpin_ = new QSpinBox;
     columnsSpin_->setRange(5, 31);
+    columnsSpin_->setSingleStep(2);
     columnsSpin_->setValue(15);
     seedSpin_ = new QSpinBox;
     seedSpin_->setRange(1, 999999999);
@@ -84,8 +87,8 @@ void MainWindow::buildUi() {
     animationSpin_->setValue(12);
     animationSpin_->setSuffix(QStringLiteral(" ms/步"));
     generationForm->addRow(QStringLiteral("算法"), algorithmBox_);
-    generationForm->addRow(QStringLiteral("行数"), rowsSpin_);
-    generationForm->addRow(QStringLiteral("列数"), columnsSpin_);
+    generationForm->addRow(QStringLiteral("输出矩阵行数"), rowsSpin_);
+    generationForm->addRow(QStringLiteral("输出矩阵列数"), columnsSpin_);
     generationForm->addRow(QStringLiteral("随机种子"), seedSpin_);
     generationForm->addRow(QStringLiteral("动画速度"), animationSpin_);
     generationLayout->addLayout(generationForm);
@@ -120,10 +123,10 @@ void MainWindow::buildUi() {
     auto *resourceForm = new QFormLayout;
     coinSpin_ = new QSpinBox;
     coinSpin_->setRange(0, 300);
-    coinSpin_->setValue(28);
+    coinSpin_->setValue(8);
     trapSpin_ = new QSpinBox;
     trapSpin_->setRange(0, 300);
-    trapSpin_->setValue(18);
+    trapSpin_->setValue(6);
     resourceForm->addRow(QStringLiteral("金币数量"), coinSpin_);
     resourceForm->addRow(QStringLiteral("陷阱数量"), trapSpin_);
     resourceLayout->addLayout(resourceForm);
@@ -143,20 +146,20 @@ void MainWindow::buildUi() {
     auto *bossGroup = new QGroupBox(QStringLiteral("任务 3：分支限界 BOSS 战"));
     auto *bossLayout = new QVBoxLayout(bossGroup);
     auto *bossForm = new QFormLayout;
-    bossHealthEdit_ = new QLineEdit(QStringLiteral("35,45,60"));
-    skillsEdit_ = new QLineEdit(QStringLiteral("普通攻击:5:0;重击:10:2;大招:18:4"));
+    bossHealthEdit_ = new QLineEdit(QStringLiteral("11,13,9,15"));
+    skillsEdit_ = new QLineEdit(
+        QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
     skillsEdit_->setToolTip(QStringLiteral("格式：名称:伤害:冷却；至少一个技能冷却为 0"));
     extraTurnsSpin_ = new QSpinBox;
     extraTurnsSpin_->setRange(0, 20);
     extraTurnsSpin_->setValue(2);
     reviveCostSpin_ = new QSpinBox;
-    reviveCostSpin_->setRange(0, 10000);
-    reviveCostSpin_->setValue(100);
-    reviveCostSpin_->setSingleStep(50);
+    reviveCostSpin_->setRange(0, 1000);
+    reviveCostSpin_->setValue(5);
     bossForm->addRow(QStringLiteral("BOSS 血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能 名称:伤害:冷却"), skillsEdit_);
-    bossForm->addRow(QStringLiteral("限定回合余量"), extraTurnsSpin_);
-    bossForm->addRow(QStringLiteral("复活金币"), reviveCostSpin_);
+    bossForm->addRow(QStringLiteral("限定回合余量（最少+余量）"), extraTurnsSpin_);
+    bossForm->addRow(QStringLiteral("失败金币消耗"), reviveCostSpin_);
     bossLayout->addLayout(bossForm);
     auto *solveBossButton = new QPushButton(QStringLiteral("分支限界求最优技能序列"));
     bossLayout->addWidget(solveBossButton);
@@ -172,7 +175,7 @@ void MainWindow::buildUi() {
     connect(battleAnimationButton, &QPushButton::clicked,
             this, &MainWindow::showBattleAnimation);
 
-    auto *exportButton = new QPushButton(QStringLiteral("导出当前迷宫与算法结果（JSON）"));
+    auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家输入 JSON"));
     panelLayout->addWidget(exportButton);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::exportMaze);
     panelLayout->addStretch();
@@ -215,7 +218,15 @@ void MainWindow::generateMaze() {
     generationTimer_->stop();
     pathTimer_->stop();
     const auto algorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
-    maze_.generate(rowsSpin_->value(), columnsSpin_->value(), algorithm,
+    const int matrixRows = rowsSpin_->value() % 2 == 0
+        ? std::min(rowsSpin_->maximum(), rowsSpin_->value() + 1)
+        : rowsSpin_->value();
+    const int matrixColumns = columnsSpin_->value() % 2 == 0
+        ? std::min(columnsSpin_->maximum(), columnsSpin_->value() + 1)
+        : columnsSpin_->value();
+    rowsSpin_->setValue(matrixRows);
+    columnsSpin_->setValue(matrixColumns);
+    maze_.generate((matrixRows - 1) / 2, (matrixColumns - 1) / 2, algorithm,
                    static_cast<quint32>(seedSpin_->value()));
     maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
                          static_cast<quint32>(seedSpin_->value() + 1));
@@ -379,8 +390,10 @@ void MainWindow::updateValidation() {
     const bool valid = maze_.validatePerfect(&reason);
     const MazeStatistics stats = maze_.statistics();
     validationLabel_->setText(
-        QStringLiteral("%1\n挑战性：解路径 %2 步，死路 %3，分叉点 %4，最长走廊 %5")
+        QStringLiteral("%1\n输出矩阵：%2×%3；挑战性：解路径 %4 步，死路 %5，分叉点 %6，最长走廊 %7")
             .arg(reason)
+            .arg(maze_.rows() * 2 + 1)
+            .arg(maze_.columns() * 2 + 1)
             .arg(stats.solutionLength)
             .arg(stats.deadEnds)
             .arg(stats.junctions)
@@ -393,64 +406,36 @@ void MainWindow::exportMaze() {
     if (maze_.cellCount() == 0) {
         return;
     }
+    bool healthOk = false;
+    bool skillsOk = false;
+    const QVector<int> health = parseBossHealth(&healthOk);
+    const QVector<BossSkill> skills = parseSkills(&skillsOk);
+    if (!healthOk || !skillsOk) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("请先填写正确的 BOSS 血量与玩家技能。"));
+        return;
+    }
+    lastBossResult_ = BossSolver::solve(health, skills);
+    if (!lastBossResult_.solved) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("当前 BOSS 参数没有可行技能序列。"));
+        return;
+    }
+
+    const QString defaultName = QStringLiteral("maze_%1_%2.json")
+                                    .arg(maze_.rows() * 2 + 1)
+                                    .arg(maze_.columns() * 2 + 1);
     const QString path = QFileDialog::getSaveFileName(
-        this, QStringLiteral("导出迷宫"), QStringLiteral("maze_export.json"),
+        this, QStringLiteral("导出 AI 玩家输入"), defaultName,
         QStringLiteral("JSON 文件 (*.json)"));
     if (path.isEmpty()) {
         return;
     }
 
-    QJsonObject root = maze_.toJson();
-    root.insert(QStringLiteral("generator"), algorithmBox_->currentText());
-    root.insert(QStringLiteral("seed"), seedSpin_->value());
-    QString validation;
-    root.insert(QStringLiteral("perfectMaze"), maze_.validatePerfect(&validation));
-    root.insert(QStringLiteral("validation"), validation);
-
-    if (!lastPlan_.walk.isEmpty()) {
-        QJsonObject plan;
-        plan.insert(QStringLiteral("maximumResource"), lastPlan_.maxValue);
-        QJsonArray walk;
-        for (int cell : lastPlan_.walk) {
-            walk.append(cell);
-        }
-        plan.insert(QStringLiteral("walk"), walk);
-        root.insert(QStringLiteral("dynamicProgrammingPlan"), plan);
-    }
-
-    bool healthOk = false;
-    bool skillsOk = false;
-    const QVector<int> health = parseBossHealth(&healthOk);
-    const QVector<BossSkill> skills = parseSkills(&skillsOk);
-    if (healthOk && skillsOk) {
-        QJsonObject battle;
-        QJsonArray bosses;
-        for (int value : health) {
-            bosses.append(value);
-        }
-        battle.insert(QStringLiteral("bossHealth"), bosses);
-        QJsonArray skillArray;
-        for (const BossSkill &skill : skills) {
-            QJsonObject item;
-            item.insert(QStringLiteral("name"), skill.name);
-            item.insert(QStringLiteral("damage"), skill.damage);
-            item.insert(QStringLiteral("cooldown"), skill.cooldown);
-            skillArray.append(item);
-        }
-        battle.insert(QStringLiteral("skills"), skillArray);
-        battle.insert(QStringLiteral("reviveCoins"), reviveCostSpin_->value());
-        if (lastBossResult_.solved) {
-            battle.insert(QStringLiteral("minimumTurns"), lastBossResult_.minimumTurns);
-            battle.insert(QStringLiteral("turnLimit"),
-                          lastBossResult_.minimumTurns + extraTurnsSpin_->value());
-            QJsonArray sequence;
-            for (int skillIndex : lastBossResult_.skillSequence) {
-                sequence.append(skills[skillIndex].name);
-            }
-            battle.insert(QStringLiteral("optimalSkillSequence"), sequence);
-        }
-        root.insert(QStringLiteral("bossBattle"), battle);
-    }
+    const QJsonObject root = buildAiPlayerInput(
+        maze_, health, skills,
+        lastBossResult_.minimumTurns + extraTurnsSpin_->value(),
+        reviveCostSpin_->value());
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)
