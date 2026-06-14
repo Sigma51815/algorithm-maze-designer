@@ -42,3 +42,6 @@ Thumbs.db
 
 # MiMoCode
 .mimocode/
+
+# Docs (reference materials, not source code)
+/docs/
