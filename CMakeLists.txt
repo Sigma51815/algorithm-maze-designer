@@ -14,10 +14,12 @@ add_executable(maze_designer
     src/source/mazewidget.cpp
     src/source/maze.cpp
     src/source/bosssolver.cpp
+    src/source/battlewindow.cpp
     src/include/mainwindow.h
     src/include/mazewidget.h
     src/include/maze.h
     src/include/bosssolver.h
+    src/include/battlewindow.h
 )
 
 target_include_directories(maze_designer PRIVATE src/include)

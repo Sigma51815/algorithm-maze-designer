@@ -49,6 +49,7 @@ private:
     void placeResources();
     void solveResources();
     void solveBossBattle();
+    void showBattleAnimation();
     void exportMaze();
     void updateValidation();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;

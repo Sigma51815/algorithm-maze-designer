@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include "battlewindow.h"
 #include "mazewidget.h"
 
 #include <QComboBox>
@@ -159,6 +160,8 @@ void MainWindow::buildUi() {
     bossLayout->addLayout(bossForm);
     auto *solveBossButton = new QPushButton(QStringLiteral("分支限界求最优技能序列"));
     bossLayout->addWidget(solveBossButton);
+    auto *battleAnimationButton = new QPushButton(QStringLiteral("打开可视化战斗动画"));
+    bossLayout->addWidget(battleAnimationButton);
     bossOutput_ = new QPlainTextEdit;
     bossOutput_->setReadOnly(true);
     bossOutput_->setMaximumHeight(150);
@@ -166,6 +169,8 @@ void MainWindow::buildUi() {
     bossLayout->addWidget(bossOutput_);
     panelLayout->addWidget(bossGroup);
     connect(solveBossButton, &QPushButton::clicked, this, &MainWindow::solveBossBattle);
+    connect(battleAnimationButton, &QPushButton::clicked,
+            this, &MainWindow::showBattleAnimation);
 
     auto *exportButton = new QPushButton(QStringLiteral("导出当前迷宫与算法结果（JSON）"));
     panelLayout->addWidget(exportButton);
@@ -339,6 +344,34 @@ void MainWindow::solveBossBattle() {
             .arg(sequenceNames.join(QStringLiteral(" → ")))
             .arg(lastBossResult_.expandedStates)
             .arg(lastBossResult_.prunedStates));
+}
+
+void MainWindow::showBattleAnimation() {
+    bool healthOk = false;
+    bool skillsOk = false;
+    const QVector<int> health = parseBossHealth(&healthOk);
+    const QVector<BossSkill> skills = parseSkills(&skillsOk);
+    if (!healthOk || !skillsOk) {
+        QMessageBox::warning(this, QStringLiteral("输入格式错误"),
+                             QStringLiteral("请先填写正确的 BOSS 血量与技能参数。"));
+        return;
+    }
+
+    lastBossResult_ = BossSolver::solve(health, skills);
+    if (!lastBossResult_.solved
+        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
+        QMessageBox::warning(this, QStringLiteral("无法开始战斗"),
+                             QStringLiteral("当前参数没有得到可验证的技能序列。"));
+        return;
+    }
+
+    auto *battleWindow = new BattleWindow(
+        health, skills, lastBossResult_,
+        lastBossResult_.minimumTurns + extraTurnsSpin_->value(),
+        reviveCostSpin_->value(), this);
+    battleWindow->show();
+    battleWindow->raise();
+    battleWindow->activateWindow();
 }
 
 void MainWindow::updateValidation() {
