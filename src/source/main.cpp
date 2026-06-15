@@ -719,16 +719,113 @@ int main(int argc, char *argv[]) {
     bool guiSmokeTest = false;
     bool battleSmokeTest = false;
     bool battleAnimationTest = false;
+    bool headlessOptimizer = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--self-test") == 0) {
             QCoreApplication app(argc, argv);
             return runSelfTests();
+        }
+        if (std::strcmp(argv[i], "--run-optimizer") == 0) {
+            headlessOptimizer = true;
         }
         guiSmokeTest = guiSmokeTest || std::strcmp(argv[i], "--gui-smoke-test") == 0;
         battleSmokeTest = battleSmokeTest
             || std::strcmp(argv[i], "--battle-smoke-test") == 0;
         battleAnimationTest = battleAnimationTest
             || std::strcmp(argv[i], "--battle-animation-test") == 0;
+    }
+
+    if (headlessOptimizer) {
+        QCoreApplication app(argc, argv);
+        QTextStream out(stdout);
+        QTextStream err(stderr);
+
+        OptimizerConfig cfg;
+        cfg.rows = 7;
+        cfg.columns = 7;
+        cfg.populationSize = 16;
+        cfg.generations = 30;
+        cfg.mutationRate = 0.15;
+        cfg.tournamentSize = 3;
+        cfg.coinCount = 8;
+        cfg.trapCount = 5;
+        cfg.useMixedAlgorithms = true;
+        cfg.useSmartPlacement = true;
+        cfg.useEnhancedFitness = true;
+        cfg.topoWeight = 0.3;
+        cfg.seed = 42;
+
+        for (int i = 1; i < argc; ++i) {
+            auto arg = [&](const char *name) -> bool {
+                return std::strcmp(argv[i], name) == 0 && i + 1 < argc;
+            };
+            if (arg("--rows")) cfg.rows = std::atoi(argv[++i]);
+            else if (arg("--cols")) cfg.columns = std::atoi(argv[++i]);
+            else if (arg("--population")) cfg.populationSize = std::atoi(argv[++i]);
+            else if (arg("--generations")) cfg.generations = std::atoi(argv[++i]);
+            else if (arg("--mutation-rate")) cfg.mutationRate = std::atof(argv[++i]);
+            else if (arg("--coins")) cfg.coinCount = std::atoi(argv[++i]);
+            else if (arg("--traps")) cfg.trapCount = std::atoi(argv[++i]);
+            else if (arg("--seed")) cfg.seed = static_cast<quint32>(std::atoll(argv[++i]));
+            else if (arg("--enable-rl")) cfg.enableRL = (std::atoi(argv[++i]) != 0);
+            else if (arg("--rl-episodes")) cfg.rlEpisodes = std::atoi(argv[++i]);
+            else if (arg("--topo-weight")) cfg.topoWeight = std::atof(argv[++i]);
+        }
+
+        out << "=== Headless Optimizer ===\n";
+        out << "Maze: " << cfg.rows << "x" << cfg.columns
+            << " | Pop: " << cfg.populationSize
+            << " | Gen: " << cfg.generations << "\n";
+        out << "Coins: " << cfg.coinCount << " | Traps: " << cfg.trapCount
+            << " | Mutation: " << (cfg.mutationRate * 100) << "%\n";
+        out << "Smart placement: " << (cfg.useSmartPlacement ? "ON" : "OFF")
+            << " | Enhanced fitness: " << (cfg.useEnhancedFitness ? "ON" : "OFF")
+            << " | RL: " << (cfg.enableRL ? "ON" : "OFF") << "\n\n";
+
+        MazeOptimizer optimizer;
+        optimizer.setConfig(cfg);
+        QObject::connect(&optimizer, &MazeOptimizer::generationFinished,
+                         [&out, &cfg](const OptimizerStats &stats) {
+                             out << QString::asprintf(
+                                 "Gen %3d/%d | best=%.1f avg=%.1f | dp=%d greedy=%d regret=%d\n",
+                                 stats.generation, cfg.generations,
+                                 stats.bestFitness, stats.avgFitness,
+                                 stats.bestDpScore, stats.bestGreedyScore,
+                                 stats.bestDpScore - stats.bestGreedyScore);
+                             out.flush();
+                         });
+
+        MazeModel best = optimizer.run();
+
+        ResourcePlan dp = best.optimalResourceWalk();
+        EvalResult eval = MazeEvaluator::evaluate(best, [&]() {
+            EvaluatorConfig ec;
+            ec.useSmartPlacement = false;
+            ec.topoWeight = cfg.topoWeight;
+            return ec;
+        }());
+        double topo = MazeEvaluator::computeTopoDifficulty(best);
+
+        out << "\n=== Result ===\n";
+        out << "DP optimal: " << dp.maxValue << "\n";
+        out << "Greedy worst: " << eval.worstGreedyScore << "\n";
+        out << "Regret: " << eval.regretCombined << "\n";
+        out << "Topo difficulty: " << topo << "\n";
+        out << "Final fitness: " << eval.finalFitness << "\n";
+        out << "Valid: " << (best.validatePerfect() ? "YES" : "NO") << "\n";
+
+        const QString outputPath = QStringLiteral("optimizer_result.json");
+        QByteArray json = serializeAiPlayerInput(best, {35, 45, 60},
+            {{QStringLiteral("Normal"), 5, 0},
+             {QStringLiteral("Heavy"), 10, 2},
+             {QStringLiteral("Ultimate"), 18, 4}},
+            20, 5);
+        QSaveFile file(outputPath);
+        if (file.open(QIODevice::WriteOnly) && file.write(json) >= 0 && file.commit()) {
+            out << "Saved: " << outputPath << "\n";
+        }
+
+        return 0;
     }
 
     QApplication app(argc, argv);
