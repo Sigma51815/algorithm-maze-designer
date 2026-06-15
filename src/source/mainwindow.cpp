@@ -932,14 +932,19 @@ void MainWindow::runOptimizer() {
                         .arg(stats.longestCorridor)
                         .arg(stats.junctions));
                 optTopoLabel_->setVisible(true);
+
+                disconnect(optimizer, &MazeOptimizer::finished, nullptr, nullptr);
+                disconnect(optimizer, &MazeOptimizer::generationFinished, nullptr, nullptr);
+                disconnect(optStopButton_, &QPushButton::clicked, optimizer, nullptr);
                 thread->quit();
+                thread->wait();
+                delete optimizer;
+                delete thread;
             });
 
     connect(thread, &QThread::started, optimizer, [optimizer]() {
         optimizer->run();
     });
-    connect(thread, &QThread::finished, optimizer, &QObject::deleteLater);
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
     thread->start();
 }

@@ -158,7 +158,7 @@ double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
         ec.useSmartPlacement = true;
         ec.placerConfig.coinCount = config_.coinCount;
         ec.placerConfig.trapCount = config_.trapCount;
-        ec.placerConfig.seed = config_.seed;
+        ec.placerConfig.seed = rng_();
         ec.topoWeight = config_.topoWeight;
         EvalResult eval = MazeEvaluator::evaluate(chrom.maze, ec);
         chrom.dpScore = eval.dpScore;
