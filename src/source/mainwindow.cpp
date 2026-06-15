@@ -742,9 +742,7 @@ void MainWindow::runAiPlayer() {
 
     connect(thread, &QThread::started, worker, [worker, mazeCopy, resultCopy]() {
         *resultCopy = GreedyPlayer::play(*mazeCopy);
-        QMetaObject::invokeMethod(worker, [worker]() {
-            QThread::currentThread()->quit();
-        });
+        QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
     });
 
     connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy]() {
