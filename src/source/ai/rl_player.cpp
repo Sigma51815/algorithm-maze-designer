@@ -13,19 +13,11 @@
 #include <limits>
 
 RLPlayer::RLPlayer() {
-    for (auto &row : qTable_) {
-        for (auto &val : row) {
-            val = 0.0;
-        }
-    }
+    qTable_.resize(StateSize * ActionCount, 0.0);
 }
 
 void RLPlayer::resetQTable() {
-    for (auto &row : qTable_) {
-        for (auto &val : row) {
-            val = 0.0;
-        }
-    }
+    qTable_.fill(0.0);
 }
 
 bool RLPlayer::saveQTable(const QString &path, const RLConfig &config) const {
@@ -46,7 +38,7 @@ bool RLPlayer::saveQTable(const QString &path, const RLConfig &config) const {
     QJsonArray tableArray;
     for (int i = 0; i < StateSize; ++i) {
         for (int j = 0; j < ActionCount; ++j) {
-            tableArray.append(qTable_[i][j]);
+            tableArray.append(qTable_[i * ActionCount + j]);
         }
     }
     json["qTable"] = tableArray;
@@ -91,7 +83,7 @@ bool RLPlayer::loadQTable(const QString &path, RLConfig &config) {
     int idx = 0;
     for (int i = 0; i < StateSize && idx < tableArray.size(); ++i) {
         for (int j = 0; j < ActionCount && idx < tableArray.size(); ++j) {
-            qTable_[i][j] = tableArray[idx++].toDouble();
+            qTable_[i * ActionCount + j] = tableArray[idx++].toDouble();
         }
     }
     return true;
@@ -113,15 +105,19 @@ int RLPlayer::encodeState(const MazeModel &maze, int cell, const QSet<int> &visi
             int cellState = 0;
             if (r >= 0 && r < rows && c >= 0 && c < cols) {
                 const int neighbor = r * cols + c;
-                const int value = maze.resourceAt(neighbor);
-                if (value != 0 && !visited.contains(neighbor)) {
-                    cellState = 2;
+                if (maze.isOpen(cell, neighbor)) {
+                    const int value = maze.resourceAt(neighbor);
+                    if (value != 0 && !visited.contains(neighbor)) {
+                        cellState = 3;
+                    } else {
+                        cellState = 2;
+                    }
                 } else {
                     cellState = 1;
                 }
             }
             viewPattern += cellState * viewPow;
-            viewPow *= 3;
+            viewPow *= 4;
         }
     }
 
@@ -145,13 +141,13 @@ int RLPlayer::chooseAction(int state, double epsilon, std::mt19937 &rng) const {
     if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < epsilon) {
         return std::uniform_int_distribution<int>(0, 3)(rng);
     }
-    double maxVal = qTable_[state][0];
+    double maxVal = qTable_[state * ActionCount + 0];
     QVector<int> best = {0};
     for (int i = 1; i < 4; ++i) {
-        if (qTable_[state][i] > maxVal + 1e-9) {
-            maxVal = qTable_[state][i];
+        if (qTable_[state * ActionCount + i] > maxVal + 1e-9) {
+            maxVal = qTable_[state * ActionCount + i];
             best = {i};
-        } else if (std::abs(qTable_[state][i] - maxVal) < 1e-9) {
+        } else if (std::abs(qTable_[state * ActionCount + i] - maxVal) < 1e-9) {
             best.append(i);
         }
     }
@@ -196,9 +192,10 @@ void RLPlayer::trainOnMaze(const MazeModel &maze, const RLConfig &config) {
             if (nr < 0 || nr >= rows || nc < 0 || nc >= cols
                 || !maze.isOpen(current, nr * cols + nc)) {
                 const double maxNext = *std::max_element(
-                    qTable_[state], qTable_[state] + ActionCount);
-                qTable_[state][action] += config.alpha
-                    * (-0.02 + config.gamma * maxNext - qTable_[state][action]);
+                    qTable_.data() + state * ActionCount,
+                    qTable_.data() + state * ActionCount + ActionCount);
+                qTable_[state * ActionCount + action] += config.alpha
+                    * (-0.05 + config.gamma * maxNext - qTable_[state * ActionCount + action]);
                 continue;
             }
 
@@ -231,9 +228,10 @@ void RLPlayer::trainOnMaze(const MazeModel &maze, const RLConfig &config) {
 
             const int nextState = encodeState(maze, current, visited);
             const double maxNext = *std::max_element(
-                qTable_[nextState], qTable_[nextState] + ActionCount);
-            qTable_[state][action] += config.alpha
-                * (reward + config.gamma * maxNext - qTable_[state][action]);
+                qTable_.data() + nextState * ActionCount,
+                qTable_.data() + nextState * ActionCount + ActionCount);
+            qTable_[state * ActionCount + action] += config.alpha
+                * (reward + config.gamma * maxNext - qTable_[state * ActionCount + action]);
         }
 
         epsilon *= config.epsilonDecay;
@@ -266,7 +264,7 @@ RLPlayResult RLPlayer::play(const MazeModel &maze, const RLConfig &config) const
         }
 
         const int state = encodeState(maze, current, visited);
-        const int action = chooseAction(state, 0.05, rng);
+        const int action = chooseAction(state, 0.0, rng);
 
         const int cr = current / cols;
         const int cc = current % cols;
@@ -274,10 +272,14 @@ RLPlayResult RLPlayer::play(const MazeModel &maze, const RLConfig &config) const
         const int nc = cc + dc[action];
 
         if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) {
+            result.path.append(current);
+            ++result.steps;
             continue;
         }
         const int next = nr * cols + nc;
         if (!maze.isOpen(current, next)) {
+            result.path.append(current);
+            ++result.steps;
             continue;
         }
 
