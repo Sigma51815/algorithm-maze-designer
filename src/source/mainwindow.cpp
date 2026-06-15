@@ -40,6 +40,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     generateMaze();
 }
 
+MainWindow::~MainWindow() {
+    if (aiWorkerThread_) {
+        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
+        aiWorkerThread_->quit();
+        aiWorkerThread_->wait();
+        if (aiWorker_) {
+            delete aiWorker_;
+            aiWorker_ = nullptr;
+        }
+        delete aiWorkerThread_;
+        aiWorkerThread_ = nullptr;
+    }
+    if (optimizerThread_) {
+        optimizerThread_->quit();
+        optimizerThread_->wait();
+    }
+}
+
 void MainWindow::buildUi() {
     setWindowTitle(QStringLiteral("算法驱动的迷宫设计"));
     resize(1280, 820);
@@ -733,7 +751,6 @@ void MainWindow::runAiPlayer() {
 
     auto *thread = new QThread;
     thread->setStackSize(8 * 1024 * 1024);
-    // Copy maze into a shared pointer so the worker lambda owns it safely.
     auto mazeCopy = std::make_shared<MazeModel>(maze_);
     auto resultCopy = std::make_shared<PlayResult>();
 
@@ -745,13 +762,9 @@ void MainWindow::runAiPlayer() {
         QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
     });
 
-    connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy]() {
-        disconnect(thread, &QThread::finished, nullptr, nullptr);
-        thread->quit();
-        thread->wait();
-        delete worker;
-        delete thread;
-
+    connect(thread, &QThread::finished, this, [this, worker, resultCopy]() {
+        worker->deleteLater();
+        aiWorker_ = nullptr;
         aiWorkerThread_ = nullptr;
         lastAiResult_ = *resultCopy;
 
@@ -774,6 +787,9 @@ void MainWindow::runAiPlayer() {
             8000);
     });
 
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+    aiWorker_ = worker;
     aiWorkerThread_ = thread;
     thread->start();
 }
@@ -840,7 +856,7 @@ void MainWindow::exportMaze() {
 }
 
 void MainWindow::runOptimizer() {
-    if (!optEnableCheck_->isChecked() || maze_.cellCount() == 0) {
+    if (!optEnableCheck_->isChecked() || maze_.cellCount() == 0 || optimizerThread_) {
         return;
     }
 
@@ -890,7 +906,8 @@ void MainWindow::runOptimizer() {
                         .arg(rlTag));
             });
 
-    connect(optStopButton_, &QPushButton::clicked, optimizer, &MazeOptimizer::stop);
+    connect(optStopButton_, &QPushButton::clicked, optimizer, &MazeOptimizer::stop,
+            Qt::DirectConnection);
 
     connect(optimizer, &MazeOptimizer::finished, this,
             [this, thread, optimizer, cfg](const MazeModel &bestMaze) {
@@ -937,19 +954,16 @@ void MainWindow::runOptimizer() {
                         .arg(stats.junctions));
                 optTopoLabel_->setVisible(true);
 
-                disconnect(optimizer, &MazeOptimizer::finished, nullptr, nullptr);
-                disconnect(optimizer, &MazeOptimizer::generationFinished, nullptr, nullptr);
-                disconnect(optStopButton_, &QPushButton::clicked, optimizer, nullptr);
-                thread->quit();
-                thread->wait();
-                delete optimizer;
-                delete thread;
+                optimizer->deleteLater();
+                thread->deleteLater();
+                optimizerThread_ = nullptr;
             });
 
     connect(thread, &QThread::started, optimizer, [optimizer]() {
         optimizer->run();
     });
 
+    optimizerThread_ = thread;
     thread->start();
 }
 
@@ -962,13 +976,13 @@ void MainWindow::applyOptimizedMaze() {
     pathTimer_->stop();
     aiPathTimer_->stop();
     if (aiWorkerThread_) {
+        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
         aiWorkerThread_->quit();
         aiWorkerThread_->wait();
-        const auto children = aiWorkerThread_->children();
-        for (QObject *child : children) {
-            child->moveToThread(QThread::currentThread());
+        if (aiWorker_) {
+            delete aiWorker_;
+            aiWorker_ = nullptr;
         }
-        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
         delete aiWorkerThread_;
         aiWorkerThread_ = nullptr;
     }

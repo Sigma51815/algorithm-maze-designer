@@ -24,6 +24,7 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 private:
     MazeModel maze_;
@@ -76,6 +77,8 @@ private:
     int lastOptGreedyScore_ = 0;
 
     QThread *aiWorkerThread_ = nullptr;
+    QObject *aiWorker_ = nullptr;
+    QThread *optimizerThread_ = nullptr;
     QLabel *aiStatusLabel_ = nullptr;
 
     void buildUi();

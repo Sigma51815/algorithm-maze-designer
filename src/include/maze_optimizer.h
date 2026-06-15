@@ -5,6 +5,7 @@
 
 #include <QObject>
 
+#include <atomic>
 #include <random>
 
 struct OptimizerConfig {
@@ -74,7 +75,7 @@ private:
     };
 
     OptimizerConfig config_;
-    bool stopped_ = false;
+    std::atomic<bool> stopped_{false};
     std::mt19937 rng_;
 
     Chromosome randomChromosome(int index, quint32 seed);

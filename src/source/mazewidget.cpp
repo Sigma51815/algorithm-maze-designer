@@ -76,7 +76,7 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.fillRect(rect(), QColor("#f4f7f8"));
 
-    if (!hasMaze_) {
+    if (!hasMaze_ || maze_.columns() == 0 || maze_.rows() == 0) {
         painter.setPen(QColor("#607080"));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("请生成迷宫"));
         return;
