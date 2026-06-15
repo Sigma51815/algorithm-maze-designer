@@ -54,7 +54,8 @@ private:
     QSpinBox *optPopSpin_ = nullptr;
     QSpinBox *optGenSpin_ = nullptr;
     QSpinBox *optMutSpin_ = nullptr;
-    QComboBox *optAlgoBox_ = nullptr;
+    QCheckBox *optEnableCheck_ = nullptr;
+    QLabel *optAlgoLabel_ = nullptr;
     QLabel *optProgressLabel_ = nullptr;
     QLabel *optResultLabel_ = nullptr;
     QPushButton *optRunButton_ = nullptr;

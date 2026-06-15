@@ -18,6 +18,10 @@ struct CoEvolConfig {
     quint32 baseSeed = 202506;
     int coinCount = 30;
     int trapCount = 20;
+    // When true (default) the initial GA population is seeded by round-robining
+    // all four base algorithms so co-evolution builds *on top of* the four base
+    // algorithms instead of a single one. When false, only baseAlgorithm is used.
+    bool useMixedAlgorithms = true;
 };
 
 struct CoEvolResult {

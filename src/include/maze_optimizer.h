@@ -23,6 +23,11 @@ struct OptimizerConfig {
     int rlEpisodes = 50;
     int rlTopK = 3;
     int rlRefineSteps = 5;
+    // When true (default) the initial population is seeded by round-robining
+    // all four base algorithms (DivideAndConquer/KruskalMst/DFS/BFS) so the GA
+    // optimizes *on top of* the four base algorithms instead of a single one.
+    // When false, only baseAlgorithm is used (legacy behaviour).
+    bool useMixedAlgorithms = true;
 };
 
 struct OptimizerStats {
@@ -49,6 +54,9 @@ public:
 
     static void edgeSwap(MazeModel &maze, std::mt19937 &rng);
     static MazeModel crossover(const MazeModel &a, const MazeModel &b, std::mt19937 &rng);
+    // Round-robins the four base maze algorithms by index:
+    // 0→DivideAndConquer, 1→KruskalMst, 2→DFS, 3→BFS, 4→DivideAndConquer, ...
+    static MazeAlgorithm algorithmForIndex(int index);
 
 signals:
     void generationFinished(const OptimizerStats &stats);
@@ -66,7 +74,7 @@ private:
     bool stopped_ = false;
     std::mt19937 rng_;
 
-    Chromosome randomChromosome(quint32 seed);
+    Chromosome randomChromosome(int index, quint32 seed);
     double evaluateFitness(Chromosome &chrom);
     Chromosome crossover(const Chromosome &a, const Chromosome &b);
     void mutate(Chromosome &chrom);

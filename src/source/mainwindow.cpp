@@ -243,6 +243,14 @@ void MainWindow::buildUi() {
     optGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *optLayout = new QVBoxLayout(optGroup);
     optLayout->setSpacing(8);
+
+    optEnableCheck_ = new QCheckBox(QStringLiteral("启用遗传算法优化"));
+    optEnableCheck_->setObjectName(QStringLiteral("inputControl"));
+    optEnableCheck_->setToolTip(QStringLiteral(
+        "默认关闭：GA 优化与 RL 训练会消耗大量 CPU。本地机型请谨慎开启。"));
+    optEnableCheck_->setChecked(false);
+    optLayout->addWidget(optEnableCheck_);
+
     auto *optForm = new QFormLayout;
     optForm->setSpacing(6);
     optForm->setLabelAlignment(Qt::AlignRight);
@@ -259,21 +267,20 @@ void MainWindow::buildUi() {
     optMutSpin_->setRange(0, 100);
     optMutSpin_->setValue(15);
     optMutSpin_->setSuffix(QStringLiteral(" %"));
-    optAlgoBox_ = new QComboBox;
-    optAlgoBox_->setObjectName(QStringLiteral("inputControl"));
-    optAlgoBox_->addItems({QStringLiteral("分治"),
-                           QStringLiteral("Kruskal MST"),
-                           QStringLiteral("DFS"),
-                           QStringLiteral("BFS 分支限界")});
-    optAlgoBox_->setCurrentIndex(3);
+    optAlgoLabel_ = new QLabel(QStringLiteral("四种算法均匀混合"));
+    optAlgoLabel_->setObjectName(QStringLiteral("infoCard"));
+    optAlgoLabel_->setToolTip(QStringLiteral(
+        "GA 初始种群按分治 / Kruskal / DFS / BFS 四种基础算法均匀轮转生成，"
+        "在四种算法的基础上进行进化优化。"));
     optForm->addRow(QStringLiteral("种群"), optPopSpin_);
     optForm->addRow(QStringLiteral("代数"), optGenSpin_);
     optForm->addRow(QStringLiteral("变异率"), optMutSpin_);
-    optForm->addRow(QStringLiteral("基算法"), optAlgoBox_);
+    optForm->addRow(QStringLiteral("初始种群"), optAlgoLabel_);
 
     optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
     optRLCheck_->setObjectName(QStringLiteral("inputControl"));
-    optRLCheck_->setToolTip(QStringLiteral("每代 GA 后用 RL 微调 top-k 个体（增加 CPU 负载）"));
+    optRLCheck_->setToolTip(QStringLiteral(
+        "默认关闭：每代 GA 后用 RL 微调 top-k 个体，CPU 负载显著增加。"));
     optForm->addRow(QStringLiteral("RL"), optRLCheck_);
     optRLEpisodesSpin_ = new QSpinBox;
     optRLEpisodesSpin_->setObjectName(QStringLiteral("inputControl"));
@@ -289,9 +296,33 @@ void MainWindow::buildUi() {
     optForm->addRow(QStringLiteral("RL Top-K"), optRLTopKSpin_);
 
     connect(optRLCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!optEnableCheck_->isChecked()) {
+            optRLEpisodesSpin_->setEnabled(false);
+            optRLTopKSpin_->setEnabled(false);
+            return;
+        }
         optRLEpisodesSpin_->setEnabled(checked);
         optRLTopKSpin_->setEnabled(checked);
     });
+
+    // GA master switch: lock/unlock the whole optimization panel.
+    // NOTE: optRunButton_ is created further below, so the lambda null-guards
+    // any control that may not exist yet at first call.
+    auto updateOptPanelEnabled = [this](bool enabled) {
+        if (optPopSpin_) optPopSpin_->setEnabled(enabled);
+        if (optGenSpin_) optGenSpin_->setEnabled(enabled);
+        if (optMutSpin_) optMutSpin_->setEnabled(enabled);
+        if (optRLCheck_) optRLCheck_->setEnabled(enabled);
+        if (optRunButton_) optRunButton_->setEnabled(enabled);
+        if (!enabled) {
+            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(false);
+            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(false);
+        } else if (optRLCheck_ && optRLCheck_->isChecked()) {
+            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(true);
+            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(true);
+        }
+    };
+    connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
 
     optLayout->addLayout(optForm);
     auto *optButtons = new QHBoxLayout;
@@ -330,6 +361,14 @@ void MainWindow::buildUi() {
     connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
     connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
     connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
+    // Lock the panel initially (GA off by default to protect local CPU).
+    if (!optEnableCheck_->isChecked()) {
+        optPopSpin_->setEnabled(false);
+        optGenSpin_->setEnabled(false);
+        optMutSpin_->setEnabled(false);
+        optRLCheck_->setEnabled(false);
+        optRunButton_->setEnabled(false);
+    }
 
     auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家 JSON"));
     exportButton->setObjectName(QStringLiteral("secondaryButton"));
@@ -373,112 +412,112 @@ void MainWindow::buildUi() {
     });
 
     setStyleSheet(QStringLiteral(R"(
-        QMainWindow { background: #0f172a; }
-        QSplitter::handle { background: #334155; }
+        QMainWindow { background: #FFF8F0; }
+        QSplitter::handle { background: #E8D5C0; }
 
-        QScrollArea { background: #0f172a; border: none; }
-        QScrollArea > QWidget > QWidget { background: #0f172a; }
+        QScrollArea { background: #FFF8F0; border: none; }
+        QScrollArea > QWidget > QWidget { background: #FFF8F0; }
 
         #panelTitle {
-            color: #f8fafc; font-size: 18px; font-weight: 700;
+            color: #4A2C17; font-size: 18px; font-weight: 700;
             padding: 4px 0 2px 0; letter-spacing: 1px;
         }
         #legendLabel {
-            color: #94a3b8; font-size: 11px; padding: 2px 0 6px 0;
+            color: #8B6F5E; font-size: 11px; padding: 2px 0 6px 0;
         }
         #separator {
-            border: none; border-top: 1px solid #1e293b;
+            border: none; border-top: 1px solid #E8D5C0;
             margin: 4px 0;
         }
 
         QGroupBox#taskGroup {
-            color: #e2e8f0; font-size: 13px; font-weight: 600;
-            border: 1px solid #334155; border-radius: 8px;
+            color: #5C3D2E; font-size: 13px; font-weight: 600;
+            border: 1px solid #D4B896; border-radius: 8px;
             margin-top: 14px; padding: 14px 10px 10px 10px;
-            background: #1e293b;
+            background: #FEF5E7;
         }
         QGroupBox#taskGroup::title {
             subcontrol-origin: margin; left: 12px; padding: 0 6px;
-            color: #fbbf24;
+            color: #D4760A;
         }
 
         #infoCard {
-            background: #172554; color: #93c5fd;
+            background: #FFF5E6; color: #8B5E3C;
             padding: 10px; border-radius: 6px; font-size: 11px;
-            border: 1px solid #1e3a5f;
+            border: 1px solid #E8D5C0;
         }
 
-        QLabel { color: #cbd5e1; font-size: 12px; }
+        QLabel { color: #5C3D2E; font-size: 12px; }
         QLabel#resultLabel {
-            color: #a7f3d0; font-size: 12px;
-            padding: 6px 8px; background: #064e3b;
-            border-radius: 5px; border: 1px solid #065f46;
+            color: #2E7D32; font-size: 12px;
+            padding: 6px 8px; background: #E8F5E9;
+            border-radius: 5px; border: 1px solid #A5D6A7;
         }
 
-        QFormLayout QLabel { color: #94a3b8; font-size: 12px; }
+        QFormLayout QLabel { color: #7A5C4A; font-size: 12px; }
 
         QSpinBox#inputControl, QComboBox#inputControl, QLineEdit#inputControl {
-            background: #0f172a; color: #e2e8f0;
-            border: 1px solid #475569; border-radius: 5px;
+            background: #FFFFFF; color: #4A2C17;
+            border: 1px solid #D4B896; border-radius: 5px;
             padding: 5px 8px; font-size: 12px; min-height: 22px;
         }
         QSpinBox#inputControl:focus, QComboBox#inputControl:focus,
         QLineEdit#inputControl:focus {
-            border-color: #fbbf24;
+            border-color: #E07B39;
         }
         QComboBox#inputControl::drop-down {
             border: none; width: 20px;
         }
         QComboBox#inputControl::down-arrow {
             image: none; border-left: 4px solid transparent;
-            border-right: 4px solid transparent; border-top: 5px solid #94a3b8;
+            border-right: 4px solid transparent; border-top: 5px solid #8B6F5E;
             margin-right: 6px;
         }
         QComboBox#inputControl QAbstractItemView {
-            background: #1e293b; color: #e2e8f0;
-            selection-background-color: #334155;
-            border: 1px solid #475569;
+            background: #FFFFFF; color: #4A2C17;
+            selection-background-color: #FFE8CC;
+            border: 1px solid #D4B896;
         }
 
         QPlainTextEdit#outputConsole {
-            background: #0c1222; color: #a7f3d0;
-            border: 1px solid #334155; border-radius: 6px;
+            background: #FFF8F0; color: #5C3D2E;
+            border: 1px solid #D4B896; border-radius: 6px;
             padding: 8px; font-family: 'Menlo', 'Consolas', monospace;
             font-size: 11px;
         }
 
         QPushButton#primaryButton {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #f59e0b, stop:1 #d97706);
-            color: #1c1917; font-weight: 700; font-size: 12px;
+                stop:0 #F0943A, stop:1 #D4760A);
+            color: #FFFFFF; font-weight: 700; font-size: 12px;
             border: none; border-radius: 6px; padding: 8px 14px;
         }
         QPushButton#primaryButton:hover {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #fbbf24, stop:1 #f59e0b);
+                stop:0 #F5A856, stop:1 #E08A2A);
         }
-        QPushButton#primaryButton:pressed { background: #b45309; }
+        QPushButton#primaryButton:pressed { background: #B86408; }
 
         QPushButton#secondaryButton {
-            background: #334155; color: #e2e8f0; font-size: 12px;
-            border: 1px solid #475569; border-radius: 6px; padding: 8px 14px;
+            background: #F0E0CC; color: #5C3D2E; font-size: 12px;
+            border: 1px solid #D4B896; border-radius: 6px; padding: 8px 14px;
         }
-        QPushButton#secondaryButton:hover { background: #475569; }
-        QPushButton#secondaryButton:pressed { background: #1e293b; }
+        QPushButton#secondaryButton:hover { background: #E8D5C0; }
+        QPushButton#secondaryButton:pressed { background: #D4C4A8; }
 
         QPushButton#accentButton {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #06b6d4, stop:1 #0891b2);
-            color: #0c1222; font-weight: 700; font-size: 12px;
+                stop:0 #6AAF6D, stop:1 #4A9E4D);
+            color: #FFFFFF; font-weight: 700; font-size: 12px;
             border: none; border-radius: 6px; padding: 8px 14px;
         }
         QPushButton#accentButton:hover {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #22d3ee, stop:1 #06b6d4);
+                stop:0 #7CC47F, stop:1 #5AB45D);
         }
-        QPushButton#accentButton:pressed { background: #0e7490; }
+        QPushButton#accentButton:pressed { background: #3A8E3D; }
 
-        QStatusBar { background: #0f172a; color: #94a3b8; font-size: 11px; }
+        QStatusBar { background: #FFF8F0; color: #8B6F5E; font-size: 11px; }
         QStatusBar::item { border: none; }
     )"));
 }
@@ -702,8 +741,8 @@ void MainWindow::updateValidation() {
             .arg(stats.deadEnds)
             .arg(stats.junctions)
             .arg(stats.longestCorridor));
-    validationLabel_->setStyleSheet(valid ? QStringLiteral("color:#167143;")
-                                          : QStringLiteral("color:#b13232;"));
+    validationLabel_->setStyleSheet(valid ? QStringLiteral("color:#2E7D32;")
+                                          : QStringLiteral("color:#C62828;"));
 }
 
 void MainWindow::exportMaze() {
@@ -750,7 +789,7 @@ void MainWindow::exportMaze() {
 }
 
 void MainWindow::runOptimizer() {
-    if (maze_.cellCount() == 0) {
+    if (!optEnableCheck_->isChecked() || maze_.cellCount() == 0) {
         return;
     }
 
@@ -762,11 +801,11 @@ void MainWindow::runOptimizer() {
     cfg.mutationRate = optMutSpin_->value() / 100.0;
     cfg.coinCount = coinSpin_->value();
     cfg.trapCount = trapSpin_->value();
-    cfg.baseAlgorithm = static_cast<MazeAlgorithm>(optAlgoBox_->currentIndex());
     cfg.seed = static_cast<quint32>(seedSpin_->value());
     cfg.enableRL = optRLCheck_->isChecked();
     cfg.rlEpisodes = optRLEpisodesSpin_->value();
     cfg.rlTopK = optRLTopKSpin_->value();
+    cfg.useMixedAlgorithms = true;
 
     optRunButton_->setEnabled(false);
     optStopButton_->setEnabled(true);

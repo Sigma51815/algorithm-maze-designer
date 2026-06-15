@@ -512,6 +512,61 @@ int runSelfTests() {
                << '\n';
     }
 
+    // Verify the four base algorithms round-robin through algorithmForIndex,
+    // and that useMixedAlgorithms seeds the GA population from all four
+    // base algorithms instead of a single one.
+    {
+        QSet<int> seenEnumValues;
+        for (int i = 0; i < 8; ++i) {
+            seenEnumValues.insert(static_cast<int>(MazeOptimizer::algorithmForIndex(i)));
+        }
+        if (seenEnumValues.size() != 4) {
+            output << "FAIL algorithmForIndex did not cover all 4 algorithms\n";
+            return 23;
+        }
+
+        // Run a small GA with mixed algorithms; the best maze must still be
+        // a valid perfect maze built on top of the four base algorithms.
+        OptimizerConfig mixedCfg;
+        mixedCfg.rows = 5;
+        mixedCfg.columns = 5;
+        mixedCfg.populationSize = 8;
+        mixedCfg.generations = 5;
+        mixedCfg.mutationRate = 0.3;
+        mixedCfg.tournamentSize = 2;
+        mixedCfg.baseAlgorithm = MazeAlgorithm::BreadthFirstSearch;
+        mixedCfg.seed = 77000U;
+        mixedCfg.coinCount = 5;
+        mixedCfg.trapCount = 3;
+        mixedCfg.useMixedAlgorithms = true;
+
+        MazeOptimizer mixedOpt;
+        mixedOpt.setConfig(mixedCfg);
+        const MazeModel mixedBest = mixedOpt.run();
+        QString mixedReason;
+        if (!mixedBest.validatePerfect(&mixedReason)) {
+            output << "FAIL mixed-algo GA produced invalid maze: " << mixedReason << '\n';
+            return 24;
+        }
+
+        // Sanity: same config with useMixedAlgorithms=false should still
+        // produce a valid maze (legacy single-algorithm path preserved).
+        OptimizerConfig singleCfg = mixedCfg;
+        singleCfg.useMixedAlgorithms = false;
+        MazeOptimizer singleOpt;
+        singleOpt.setConfig(singleCfg);
+        const MazeModel singleBest = singleOpt.run();
+        if (!singleBest.validatePerfect()) {
+            output << "FAIL single-algo GA legacy path produced invalid maze\n";
+            return 25;
+        }
+
+        const ResourcePlan mixedDp = mixedBest.optimalResourceWalk();
+        output << "PASS four-algo mixed GA: regret=" << mixedDp.maxValue
+               << ", validate=" << mixedReason
+               << ", single-legacy-ok=" << singleBest.validatePerfect() << '\n';
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }

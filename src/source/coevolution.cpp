@@ -24,7 +24,10 @@ CoEvolResult CoEvolution::run(const CoEvolConfig &config) {
 
     QVector<MazeModel> population(popSize);
     for (int i = 0; i < popSize; ++i) {
-        population[i].generate(config.mazeRows, config.mazeCols, config.baseAlgorithm,
+        const MazeAlgorithm algo = config.useMixedAlgorithms
+            ? MazeOptimizer::algorithmForIndex(i)
+            : config.baseAlgorithm;
+        population[i].generate(config.mazeRows, config.mazeCols, algo,
                                static_cast<quint32>(config.baseSeed + i * 1000));
         for (int m = 0; m < 5; ++m) {
             MazeOptimizer::edgeSwap(population[i], rng);

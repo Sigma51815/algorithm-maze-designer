@@ -26,7 +26,7 @@ MazeModel MazeOptimizer::run() {
 
     QVector<Chromosome> population(config_.populationSize);
     for (int i = 0; i < config_.populationSize; ++i) {
-        population[i] = randomChromosome(static_cast<quint32>(config_.seed + i));
+        population[i] = randomChromosome(i, static_cast<quint32>(config_.seed + i));
         evaluateFitness(population[i]);
     }
 
@@ -123,9 +123,21 @@ MazeModel MazeOptimizer::run() {
     return best.maze;
 }
 
-MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(quint32 seed) {
+MazeAlgorithm MazeOptimizer::algorithmForIndex(int index) {
+    static constexpr MazeAlgorithm kAllAlgorithms[4] = {
+        MazeAlgorithm::DivideAndConquer,
+        MazeAlgorithm::KruskalMst,
+        MazeAlgorithm::DepthFirstSearch,
+        MazeAlgorithm::BreadthFirstSearch};
+    return kAllAlgorithms[((index % 4) + 4) % 4];
+}
+
+MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 seed) {
     Chromosome chrom;
-    chrom.maze.generate(config_.rows, config_.columns, config_.baseAlgorithm, seed);
+    const MazeAlgorithm algo = config_.useMixedAlgorithms
+        ? algorithmForIndex(index)
+        : config_.baseAlgorithm;
+    chrom.maze.generate(config_.rows, config_.columns, algo, seed);
     chrom.maze.placeResources(config_.coinCount, config_.trapCount, seed + 1000);
     return chrom;
 }
@@ -221,7 +233,10 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
 
     if (dist(rng_) < 0.3) {
         quint32 newSeed = rng_();
-        chrom.maze.generate(config_.rows, config_.columns, config_.baseAlgorithm, newSeed);
+        const MazeAlgorithm algo = config_.useMixedAlgorithms
+            ? algorithmForIndex(static_cast<int>(rng_() % 4))
+            : config_.baseAlgorithm;
+        chrom.maze.generate(config_.rows, config_.columns, algo, newSeed);
         chrom.maze.placeResources(config_.coinCount, config_.trapCount, newSeed + 1000);
         return;
     }
