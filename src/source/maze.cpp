@@ -552,26 +552,24 @@ QVector<CellTopology> MazeModel::analyzeTopology() const {
     QVector<CellTopology> result(cellCount());
     if (cellCount() == 0) return result;
 
+    QVector<int> parent = bfsParent();
+
     QVector<int> depth(cellCount(), -1);
     QQueue<int> queue;
     depth[startCell()] = 0;
     queue.enqueue(startCell());
-
-    QVector<int> parent(cellCount(), -1);
-    parent[startCell()] = startCell();
-
     while (!queue.isEmpty()) {
         int cur = queue.dequeue();
         for (int next : neighbors(cur)) {
             if (depth[next] < 0) {
                 depth[next] = depth[cur] + 1;
-                parent[next] = cur;
                 queue.enqueue(next);
             }
         }
     }
 
     QVector<bool> onMainPath(cellCount(), false);
+    if (parent[endCell()] < 0) return result;
     for (int cell = endCell();; cell = parent[cell]) {
         onMainPath[cell] = true;
         if (cell == startCell()) break;
@@ -630,8 +628,9 @@ QVector<int> MazeModel::deadEndCells() const {
     return result;
 }
 
-QVector<int> MazeModel::branchCells() const {
+QVector<int> MazeModel::bfsParent() const {
     QVector<int> parent(cellCount(), -1);
+    if (cellCount() == 0) return parent;
     QQueue<int> queue;
     parent[startCell()] = startCell();
     queue.enqueue(startCell());
@@ -644,7 +643,13 @@ QVector<int> MazeModel::branchCells() const {
             }
         }
     }
+    return parent;
+}
+
+QVector<int> MazeModel::branchCells() const {
+    QVector<int> parent = bfsParent();
     QVector<bool> onMain(cellCount(), false);
+    if (parent[endCell()] < 0) return {};
     for (int cell = endCell();; cell = parent[cell]) {
         onMain[cell] = true;
         if (cell == startCell()) break;
@@ -658,19 +663,8 @@ QVector<int> MazeModel::branchCells() const {
 }
 
 QVector<int> MazeModel::mainPathCells() const {
-    QVector<int> parent(cellCount(), -1);
-    QQueue<int> queue;
-    parent[startCell()] = startCell();
-    queue.enqueue(startCell());
-    while (!queue.isEmpty() && parent[endCell()] < 0) {
-        int cur = queue.dequeue();
-        for (int next : neighbors(cur)) {
-            if (parent[next] < 0) {
-                parent[next] = cur;
-                queue.enqueue(next);
-            }
-        }
-    }
+    QVector<int> parent = bfsParent();
+    if (parent[endCell()] < 0) return {};
     QVector<int> result;
     for (int cell = endCell();; cell = parent[cell]) {
         result.append(cell);

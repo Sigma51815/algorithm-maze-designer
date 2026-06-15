@@ -104,6 +104,7 @@ private:
     [[nodiscard]] int rowOf(int cell) const { return cell / columns_; }
     [[nodiscard]] int columnOf(int cell) const { return cell % columns_; }
     [[nodiscard]] QVector<int> gridNeighbors(int cell) const;
+    [[nodiscard]] QVector<int> bfsParent() const;
     void reset(int rows, int columns, quint32 seed);
     void carve(int first, int second);
     void chooseDiameterEndpoints();
