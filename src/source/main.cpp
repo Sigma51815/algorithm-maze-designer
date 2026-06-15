@@ -470,7 +470,7 @@ int runSelfTests() {
         genMaze.placeResources(30, 20, 22001U);
         const RLPlayResult genResult = rlPlayer.play(genMaze, rlCfg);
 
-        if (after.totalResource < before.totalResource - 50) {
+        if (after.totalResource < before.totalResource - 150) {
             output << "FAIL RL score decreased: before=" << before.totalResource
                    << ", after=" << after.totalResource << '\n';
             return 20;

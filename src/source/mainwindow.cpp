@@ -954,8 +954,12 @@ void MainWindow::runOptimizer() {
                         .arg(stats.junctions));
                 optTopoLabel_->setVisible(true);
 
-                optimizer->deleteLater();
-                thread->deleteLater();
+                disconnect(optimizer, &MazeOptimizer::finished, nullptr, nullptr);
+                disconnect(optimizer, &MazeOptimizer::generationFinished, nullptr, nullptr);
+                thread->quit();
+                thread->wait();
+                delete optimizer;
+                delete thread;
                 optimizerThread_ = nullptr;
             });
 
