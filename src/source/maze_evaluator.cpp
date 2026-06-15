@@ -10,10 +10,6 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 
     if (config.useSmartPlacement) {
         ResourcePlacer::placeSmart(maze, config.placerConfig);
-    } else {
-        maze.placeResources(config.placerConfig.coinCount,
-                            config.placerConfig.trapCount,
-                            config.placerConfig.seed);
     }
 
     ResourcePlan dp = maze.optimalResourceWalk();

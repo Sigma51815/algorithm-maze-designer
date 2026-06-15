@@ -155,7 +155,10 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
 double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
     if (config_.useEnhancedFitness) {
         EvaluatorConfig ec;
-        ec.useSmartPlacement = false;
+        ec.useSmartPlacement = true;
+        ec.placerConfig.coinCount = config_.coinCount;
+        ec.placerConfig.trapCount = config_.trapCount;
+        ec.placerConfig.seed = config_.seed;
         ec.topoWeight = config_.topoWeight;
         EvalResult eval = MazeEvaluator::evaluate(chrom.maze, ec);
         chrom.dpScore = eval.dpScore;
