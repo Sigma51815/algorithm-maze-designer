@@ -4,6 +4,7 @@
 #include "battlewindow.h"
 #include "maze_optimizer.h"
 #include "maze_saver.h"
+#include "maze_evaluator.h"
 #include "mazewidget.h"
 
 #include <QCheckBox>
@@ -177,6 +178,13 @@ void MainWindow::buildUi() {
     optForm->addRow(QStringLiteral("变异率"), optMutSpin_);
     optForm->addRow(QStringLiteral("初始种群"), optAlgoLabel_);
 
+    optSmartPlaceCheck_ = new QCheckBox(QStringLiteral("智能资源分布"));
+    optSmartPlaceCheck_->setObjectName(QStringLiteral("inputControl"));
+    optSmartPlaceCheck_->setChecked(true);
+    optSmartPlaceCheck_->setToolTip(QStringLiteral(
+        "基于迷宫拓扑分析放置资源：金币放死胡同深处诱导AI，陷阱放分叉口迫使决策"));
+    optForm->addRow(QStringLiteral("资源策略"), optSmartPlaceCheck_);
+
     optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
     optRLCheck_->setObjectName(QStringLiteral("inputControl"));
     optRLCheck_->setToolTip(QStringLiteral(
@@ -242,6 +250,11 @@ void MainWindow::buildUi() {
     optResultLabel_->setWordWrap(true);
     optResultLabel_->setVisible(false);
     generationLayout->addWidget(optResultLabel_);
+    optTopoLabel_ = new QLabel;
+    optTopoLabel_->setObjectName(QStringLiteral("infoCard"));
+    optTopoLabel_->setWordWrap(true);
+    optTopoLabel_->setVisible(false);
+    generationLayout->addWidget(optTopoLabel_);
     auto *optButtonRow = new QHBoxLayout;
     optButtonRow->setSpacing(8);
     auto *applyOptButton = new QPushButton(QStringLiteral("应用优化迷宫"));
@@ -841,6 +854,9 @@ void MainWindow::runOptimizer() {
     cfg.rlEpisodes = optRLEpisodesSpin_->value();
     cfg.rlTopK = optRLTopKSpin_->value();
     cfg.useMixedAlgorithms = true;
+    cfg.useSmartPlacement = optSmartPlaceCheck_->isChecked();
+    cfg.useEnhancedFitness = true;
+    cfg.topoWeight = 0.3;
 
     optRunButton_->setEnabled(false);
     optStopButton_->setEnabled(true);
@@ -906,6 +922,16 @@ void MainWindow::runOptimizer() {
                         .arg(lastOptGreedyScore_)
                         .arg(lastOptFitness_));
                 optResultLabel_->setVisible(true);
+
+                MazeStatistics stats = optimizedMaze_.statistics();
+                double topoDiff = MazeEvaluator::computeTopoDifficulty(optimizedMaze_);
+                optTopoLabel_->setText(
+                    QStringLiteral("拓扑难度 %1  |  死胡同 %2  |  最长走廊 %3  |  分叉口 %4")
+                        .arg(topoDiff, 0, 'f', 2)
+                        .arg(stats.deadEnds)
+                        .arg(stats.longestCorridor)
+                        .arg(stats.junctions));
+                optTopoLabel_->setVisible(true);
                 thread->quit();
             });
 
