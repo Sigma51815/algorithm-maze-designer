@@ -732,6 +732,7 @@ void MainWindow::runAiPlayer() {
     aiStatusLabel_->setVisible(true);
 
     auto *thread = new QThread;
+    thread->setStackSize(8 * 1024 * 1024);
     // Copy maze into a shared pointer so the worker lambda owns it safely.
     auto mazeCopy = std::make_shared<MazeModel>(maze_);
     auto resultCopy = std::make_shared<PlayResult>();
@@ -741,11 +742,18 @@ void MainWindow::runAiPlayer() {
 
     connect(thread, &QThread::started, worker, [worker, mazeCopy, resultCopy]() {
         *resultCopy = GreedyPlayer::play(*mazeCopy);
-        QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
+        QMetaObject::invokeMethod(worker, [worker]() {
+            QThread::currentThread()->quit();
+        });
     });
 
-    connect(thread, &QThread::finished, this, [this, worker, resultCopy]() {
-        worker->deleteLater();
+    connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy]() {
+        disconnect(thread, &QThread::finished, nullptr, nullptr);
+        thread->quit();
+        thread->wait();
+        delete worker;
+        delete thread;
+
         aiWorkerThread_ = nullptr;
         lastAiResult_ = *resultCopy;
 
@@ -767,9 +775,6 @@ void MainWindow::runAiPlayer() {
                 .arg(lastAiResult_.triggeredTraps),
             8000);
     });
-
-    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
     aiWorkerThread_ = thread;
     thread->start();
