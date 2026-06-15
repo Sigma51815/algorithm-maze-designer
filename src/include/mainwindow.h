@@ -15,6 +15,7 @@ class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
+class QThread;
 class QTimer;
 class MazeWidget;
 
@@ -71,6 +72,9 @@ private:
     int lastOptFitness_ = 0;
     int lastOptDpScore_ = 0;
     int lastOptGreedyScore_ = 0;
+
+    QThread *aiWorkerThread_ = nullptr;
+    QLabel *aiStatusLabel_ = nullptr;
 
     void buildUi();
     void generateMaze();

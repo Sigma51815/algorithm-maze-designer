@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     buildUi();
@@ -137,6 +138,135 @@ void MainWindow::buildUi() {
     updateComplexity(algorithmBox_->currentIndex());
     connect(generateButton, &QPushButton::clicked, this, &MainWindow::generateMaze);
 
+    // ── sub-separator: 遗传算法优化（合并进①） ──
+    auto *optSep = new QFrame;
+    optSep->setFrameShape(QFrame::HLine);
+    optSep->setObjectName(QStringLiteral("separator"));
+    generationLayout->addWidget(optSep);
+
+    optEnableCheck_ = new QCheckBox(QStringLiteral("启用遗传算法优化"));
+    optEnableCheck_->setObjectName(QStringLiteral("inputControl"));
+    optEnableCheck_->setToolTip(QStringLiteral(
+        "默认关闭：GA 优化与 RL 训练会消耗大量 CPU。本地机型请谨慎开启。"));
+    optEnableCheck_->setChecked(false);
+    generationLayout->addWidget(optEnableCheck_);
+
+    auto *optForm = new QFormLayout;
+    optForm->setSpacing(6);
+    optForm->setLabelAlignment(Qt::AlignRight);
+    optPopSpin_ = new QSpinBox;
+    optPopSpin_->setObjectName(QStringLiteral("inputControl"));
+    optPopSpin_->setRange(4, 100);
+    optPopSpin_->setValue(16);
+    optGenSpin_ = new QSpinBox;
+    optGenSpin_->setObjectName(QStringLiteral("inputControl"));
+    optGenSpin_->setRange(5, 500);
+    optGenSpin_->setValue(30);
+    optMutSpin_ = new QSpinBox;
+    optMutSpin_->setObjectName(QStringLiteral("inputControl"));
+    optMutSpin_->setRange(0, 100);
+    optMutSpin_->setValue(15);
+    optMutSpin_->setSuffix(QStringLiteral(" %"));
+    optAlgoLabel_ = new QLabel(QStringLiteral("四种算法均匀混合"));
+    optAlgoLabel_->setObjectName(QStringLiteral("infoCard"));
+    optAlgoLabel_->setToolTip(QStringLiteral(
+        "GA 初始种群按分治 / Kruskal / DFS / BFS 四种基础算法均匀轮转生成，"
+        "在四种算法的基础上进行进化优化。"));
+    optForm->addRow(QStringLiteral("种群"), optPopSpin_);
+    optForm->addRow(QStringLiteral("代数"), optGenSpin_);
+    optForm->addRow(QStringLiteral("变异率"), optMutSpin_);
+    optForm->addRow(QStringLiteral("初始种群"), optAlgoLabel_);
+
+    optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
+    optRLCheck_->setObjectName(QStringLiteral("inputControl"));
+    optRLCheck_->setToolTip(QStringLiteral(
+        "默认关闭：每代 GA 后用 RL 微调 top-k 个体，CPU 负载显著增加。"));
+    optForm->addRow(QStringLiteral("RL"), optRLCheck_);
+    optRLEpisodesSpin_ = new QSpinBox;
+    optRLEpisodesSpin_->setObjectName(QStringLiteral("inputControl"));
+    optRLEpisodesSpin_->setRange(10, 500);
+    optRLEpisodesSpin_->setValue(50);
+    optRLEpisodesSpin_->setEnabled(false);
+    optRLTopKSpin_ = new QSpinBox;
+    optRLTopKSpin_->setObjectName(QStringLiteral("inputControl"));
+    optRLTopKSpin_->setRange(1, 20);
+    optRLTopKSpin_->setValue(3);
+    optRLTopKSpin_->setEnabled(false);
+    optForm->addRow(QStringLiteral("RL 回合"), optRLEpisodesSpin_);
+    optForm->addRow(QStringLiteral("RL Top-K"), optRLTopKSpin_);
+
+    connect(optRLCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!optEnableCheck_->isChecked()) {
+            optRLEpisodesSpin_->setEnabled(false);
+            optRLTopKSpin_->setEnabled(false);
+            return;
+        }
+        optRLEpisodesSpin_->setEnabled(checked);
+        optRLTopKSpin_->setEnabled(checked);
+    });
+
+    // GA master switch: lock/unlock the optimization sub-panel.
+    auto updateOptPanelEnabled = [this](bool enabled) {
+        if (optPopSpin_) optPopSpin_->setEnabled(enabled);
+        if (optGenSpin_) optGenSpin_->setEnabled(enabled);
+        if (optMutSpin_) optMutSpin_->setEnabled(enabled);
+        if (optRLCheck_) optRLCheck_->setEnabled(enabled);
+        if (optRunButton_) optRunButton_->setEnabled(enabled);
+        if (!enabled) {
+            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(false);
+            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(false);
+        } else if (optRLCheck_ && optRLCheck_->isChecked()) {
+            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(true);
+            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(true);
+        }
+    };
+    connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
+
+    generationLayout->addLayout(optForm);
+    auto *optButtons = new QHBoxLayout;
+    optButtons->setSpacing(8);
+    optRunButton_ = new QPushButton(QStringLiteral("运行优化"));
+    optRunButton_->setObjectName(QStringLiteral("primaryButton"));
+    optStopButton_ = new QPushButton(QStringLiteral("停止"));
+    optStopButton_->setObjectName(QStringLiteral("secondaryButton"));
+    optStopButton_->setEnabled(false);
+    optButtons->addWidget(optRunButton_);
+    optButtons->addWidget(optStopButton_);
+    generationLayout->addLayout(optButtons);
+    optProgressLabel_ = new QLabel(QStringLiteral("PAIRED 适应度 = DP最优 − Greedy玩家得分"));
+    optProgressLabel_->setObjectName(QStringLiteral("infoCard"));
+    optProgressLabel_->setWordWrap(true);
+    generationLayout->addWidget(optProgressLabel_);
+    optResultLabel_ = new QLabel;
+    optResultLabel_->setObjectName(QStringLiteral("resultLabel"));
+    optResultLabel_->setWordWrap(true);
+    optResultLabel_->setVisible(false);
+    generationLayout->addWidget(optResultLabel_);
+    auto *optButtonRow = new QHBoxLayout;
+    optButtonRow->setSpacing(8);
+    auto *applyOptButton = new QPushButton(QStringLiteral("应用优化迷宫"));
+    applyOptButton->setObjectName(QStringLiteral("accentButton"));
+    applyOptButton->setEnabled(false);
+    optApplyButton_ = applyOptButton;
+    auto *saveOptButton = new QPushButton(QStringLiteral("保存最佳迷宫"));
+    saveOptButton->setObjectName(QStringLiteral("secondaryButton"));
+    saveOptButton->setEnabled(false);
+    optSaveButton_ = saveOptButton;
+    optButtonRow->addWidget(applyOptButton);
+    optButtonRow->addWidget(saveOptButton);
+    generationLayout->addLayout(optButtonRow);
+    connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
+    connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
+    connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
+    // Lock the optimization sub-panel initially (GA off by default).
+    if (!optEnableCheck_->isChecked()) {
+        optPopSpin_->setEnabled(false);
+        optGenSpin_->setEnabled(false);
+        optMutSpin_->setEnabled(false);
+        optRLCheck_->setEnabled(false);
+        optRunButton_->setEnabled(false);
+    }
+
     panelLayout->addWidget(makeSeparator());
 
     auto *resourceGroup = new QGroupBox(QStringLiteral("② 动态规划资源收集"));
@@ -234,141 +364,14 @@ void MainWindow::buildUi() {
     auto *aiButton = new QPushButton(QStringLiteral("运行贪心 AI"));
     aiButton->setObjectName(QStringLiteral("accentButton"));
     aiLayout->addWidget(aiButton);
+    aiStatusLabel_ = new QLabel(QStringLiteral("⏳ AI 正在运行..."));
+    aiStatusLabel_->setObjectName(QStringLiteral("infoCard"));
+    aiStatusLabel_->setVisible(false);
+    aiLayout->addWidget(aiStatusLabel_);
     panelLayout->addWidget(aiGroup);
     connect(aiButton, &QPushButton::clicked, this, &MainWindow::runAiPlayer);
 
     panelLayout->addWidget(makeSeparator());
-
-    auto *optGroup = new QGroupBox(QStringLiteral("⑤ 遗传算法迷宫优化"));
-    optGroup->setObjectName(QStringLiteral("taskGroup"));
-    auto *optLayout = new QVBoxLayout(optGroup);
-    optLayout->setSpacing(8);
-
-    optEnableCheck_ = new QCheckBox(QStringLiteral("启用遗传算法优化"));
-    optEnableCheck_->setObjectName(QStringLiteral("inputControl"));
-    optEnableCheck_->setToolTip(QStringLiteral(
-        "默认关闭：GA 优化与 RL 训练会消耗大量 CPU。本地机型请谨慎开启。"));
-    optEnableCheck_->setChecked(false);
-    optLayout->addWidget(optEnableCheck_);
-
-    auto *optForm = new QFormLayout;
-    optForm->setSpacing(6);
-    optForm->setLabelAlignment(Qt::AlignRight);
-    optPopSpin_ = new QSpinBox;
-    optPopSpin_->setObjectName(QStringLiteral("inputControl"));
-    optPopSpin_->setRange(4, 100);
-    optPopSpin_->setValue(16);
-    optGenSpin_ = new QSpinBox;
-    optGenSpin_->setObjectName(QStringLiteral("inputControl"));
-    optGenSpin_->setRange(5, 500);
-    optGenSpin_->setValue(30);
-    optMutSpin_ = new QSpinBox;
-    optMutSpin_->setObjectName(QStringLiteral("inputControl"));
-    optMutSpin_->setRange(0, 100);
-    optMutSpin_->setValue(15);
-    optMutSpin_->setSuffix(QStringLiteral(" %"));
-    optAlgoLabel_ = new QLabel(QStringLiteral("四种算法均匀混合"));
-    optAlgoLabel_->setObjectName(QStringLiteral("infoCard"));
-    optAlgoLabel_->setToolTip(QStringLiteral(
-        "GA 初始种群按分治 / Kruskal / DFS / BFS 四种基础算法均匀轮转生成，"
-        "在四种算法的基础上进行进化优化。"));
-    optForm->addRow(QStringLiteral("种群"), optPopSpin_);
-    optForm->addRow(QStringLiteral("代数"), optGenSpin_);
-    optForm->addRow(QStringLiteral("变异率"), optMutSpin_);
-    optForm->addRow(QStringLiteral("初始种群"), optAlgoLabel_);
-
-    optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
-    optRLCheck_->setObjectName(QStringLiteral("inputControl"));
-    optRLCheck_->setToolTip(QStringLiteral(
-        "默认关闭：每代 GA 后用 RL 微调 top-k 个体，CPU 负载显著增加。"));
-    optForm->addRow(QStringLiteral("RL"), optRLCheck_);
-    optRLEpisodesSpin_ = new QSpinBox;
-    optRLEpisodesSpin_->setObjectName(QStringLiteral("inputControl"));
-    optRLEpisodesSpin_->setRange(10, 500);
-    optRLEpisodesSpin_->setValue(50);
-    optRLEpisodesSpin_->setEnabled(false);
-    optRLTopKSpin_ = new QSpinBox;
-    optRLTopKSpin_->setObjectName(QStringLiteral("inputControl"));
-    optRLTopKSpin_->setRange(1, 20);
-    optRLTopKSpin_->setValue(3);
-    optRLTopKSpin_->setEnabled(false);
-    optForm->addRow(QStringLiteral("RL 回合"), optRLEpisodesSpin_);
-    optForm->addRow(QStringLiteral("RL Top-K"), optRLTopKSpin_);
-
-    connect(optRLCheck_, &QCheckBox::toggled, this, [this](bool checked) {
-        if (!optEnableCheck_->isChecked()) {
-            optRLEpisodesSpin_->setEnabled(false);
-            optRLTopKSpin_->setEnabled(false);
-            return;
-        }
-        optRLEpisodesSpin_->setEnabled(checked);
-        optRLTopKSpin_->setEnabled(checked);
-    });
-
-    // GA master switch: lock/unlock the whole optimization panel.
-    // NOTE: optRunButton_ is created further below, so the lambda null-guards
-    // any control that may not exist yet at first call.
-    auto updateOptPanelEnabled = [this](bool enabled) {
-        if (optPopSpin_) optPopSpin_->setEnabled(enabled);
-        if (optGenSpin_) optGenSpin_->setEnabled(enabled);
-        if (optMutSpin_) optMutSpin_->setEnabled(enabled);
-        if (optRLCheck_) optRLCheck_->setEnabled(enabled);
-        if (optRunButton_) optRunButton_->setEnabled(enabled);
-        if (!enabled) {
-            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(false);
-            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(false);
-        } else if (optRLCheck_ && optRLCheck_->isChecked()) {
-            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(true);
-            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(true);
-        }
-    };
-    connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
-
-    optLayout->addLayout(optForm);
-    auto *optButtons = new QHBoxLayout;
-    optButtons->setSpacing(8);
-    optRunButton_ = new QPushButton(QStringLiteral("运行优化"));
-    optRunButton_->setObjectName(QStringLiteral("primaryButton"));
-    optStopButton_ = new QPushButton(QStringLiteral("停止"));
-    optStopButton_->setObjectName(QStringLiteral("secondaryButton"));
-    optStopButton_->setEnabled(false);
-    optButtons->addWidget(optRunButton_);
-    optButtons->addWidget(optStopButton_);
-    optLayout->addLayout(optButtons);
-    optProgressLabel_ = new QLabel(QStringLiteral("PAIRED 适应度 = DP最优 − Greedy玩家得分"));
-    optProgressLabel_->setObjectName(QStringLiteral("infoCard"));
-    optProgressLabel_->setWordWrap(true);
-    optLayout->addWidget(optProgressLabel_);
-    optResultLabel_ = new QLabel;
-    optResultLabel_->setObjectName(QStringLiteral("resultLabel"));
-    optResultLabel_->setWordWrap(true);
-    optResultLabel_->setVisible(false);
-    optLayout->addWidget(optResultLabel_);
-    auto *optButtonRow = new QHBoxLayout;
-    optButtonRow->setSpacing(8);
-    auto *applyOptButton = new QPushButton(QStringLiteral("应用优化迷宫"));
-    applyOptButton->setObjectName(QStringLiteral("accentButton"));
-    applyOptButton->setEnabled(false);
-    optApplyButton_ = applyOptButton;
-    auto *saveOptButton = new QPushButton(QStringLiteral("保存最佳迷宫"));
-    saveOptButton->setObjectName(QStringLiteral("secondaryButton"));
-    saveOptButton->setEnabled(false);
-    optSaveButton_ = saveOptButton;
-    optButtonRow->addWidget(applyOptButton);
-    optButtonRow->addWidget(saveOptButton);
-    optLayout->addLayout(optButtonRow);
-    panelLayout->addWidget(optGroup);
-    connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
-    connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
-    connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
-    // Lock the panel initially (GA off by default to protect local CPU).
-    if (!optEnableCheck_->isChecked()) {
-        optPopSpin_->setEnabled(false);
-        optGenSpin_->setEnabled(false);
-        optMutSpin_->setEnabled(false);
-        optRLCheck_->setEnabled(false);
-        optRunButton_->setEnabled(false);
-    }
 
     auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家 JSON"));
     exportButton->setObjectName(QStringLiteral("secondaryButton"));
@@ -704,27 +707,59 @@ void MainWindow::showBattleAnimation() {
 }
 
 void MainWindow::runAiPlayer() {
-    if (maze_.cellCount() == 0) {
+    if (maze_.cellCount() == 0 || aiWorkerThread_) {
         return;
     }
     generationTimer_->stop();
     aiPathTimer_->stop();
     mazeWidget_->clearAiPath();
-    lastAiResult_ = GreedyPlayer::play(maze_);
-    if (!lastAiResult_.reachedEnd) {
-        statusBar()->showMessage(QStringLiteral("AI 玩家未能到达终点"), 5000);
-        return;
-    }
-    revealedAiPoints_ = 1;
-    mazeWidget_->setAiPath(lastAiResult_.walk, revealedAiPoints_);
-    aiPathTimer_->start();
-    statusBar()->showMessage(
-        QStringLiteral("AI 玩家完成：score=%1, 步数=%2, 金币=%3, 陷阱=%4")
-            .arg(lastAiResult_.score, 0, 'f', 2)
-            .arg(lastAiResult_.totalSteps)
-            .arg(lastAiResult_.collectedCoins)
-            .arg(lastAiResult_.triggeredTraps),
-        8000);
+    lastAiResult_ = {};
+
+    aiStatusLabel_->setText(QStringLiteral("⏳ AI 正在运行..."));
+    aiStatusLabel_->setVisible(true);
+
+    auto *thread = new QThread;
+    // Copy maze into a shared pointer so the worker lambda owns it safely.
+    auto mazeCopy = std::make_shared<MazeModel>(maze_);
+    auto resultCopy = std::make_shared<PlayResult>();
+
+    auto *worker = new QObject;
+    worker->moveToThread(thread);
+
+    connect(thread, &QThread::started, worker, [worker, mazeCopy, resultCopy]() {
+        *resultCopy = GreedyPlayer::play(*mazeCopy);
+        QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
+    });
+
+    connect(thread, &QThread::finished, this, [this, worker, resultCopy]() {
+        worker->deleteLater();
+        aiWorkerThread_ = nullptr;
+        lastAiResult_ = *resultCopy;
+
+        if (!lastAiResult_.reachedEnd) {
+            aiStatusLabel_->setText(QStringLiteral("❌ AI 未能到达终点"));
+            statusBar()->showMessage(QStringLiteral("AI 玩家未能到达终点"), 5000);
+            return;
+        }
+
+        aiStatusLabel_->setVisible(false);
+        revealedAiPoints_ = 1;
+        mazeWidget_->setAiPath(lastAiResult_.walk, revealedAiPoints_);
+        aiPathTimer_->start();
+        statusBar()->showMessage(
+            QStringLiteral("AI 玩家完成：score=%1, 步数=%2, 金币=%3, 陷阱=%4")
+                .arg(lastAiResult_.score, 0, 'f', 2)
+                .arg(lastAiResult_.totalSteps)
+                .arg(lastAiResult_.collectedCoins)
+                .arg(lastAiResult_.triggeredTraps),
+            8000);
+    });
+
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+    aiWorkerThread_ = thread;
+    thread->start();
 }
 
 void MainWindow::updateValidation() {
@@ -887,12 +922,28 @@ void MainWindow::applyOptimizedMaze() {
     if (!hasOptimizedMaze_) {
         return;
     }
+    // Stop all running timers and AI worker.
+    generationTimer_->stop();
+    pathTimer_->stop();
+    aiPathTimer_->stop();
+    if (aiWorkerThread_) {
+        aiWorkerThread_->quit();
+        aiWorkerThread_->wait();
+        aiWorkerThread_ = nullptr;
+    }
+
     maze_ = optimizedMaze_;
     lastPlan_ = {};
     lastBossResult_ = {};
+    lastAiResult_ = {};
+    revealedPathPoints_ = 0;
+    revealedAiPoints_ = 0;
+
     resourceResultLabel_->setText(QStringLiteral("已应用优化迷宫，等待 DP 求解"));
     mazeWidget_->setMaze(maze_);
     mazeWidget_->clearAiPath();
+    if (aiStatusLabel_) aiStatusLabel_->setVisible(false);
+
     revealedEdges_ = static_cast<int>(maze_.generationSteps().size());
     mazeWidget_->setRevealCount(revealedEdges_);
     updateValidation();
