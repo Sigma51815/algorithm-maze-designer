@@ -451,7 +451,7 @@ int runSelfTests() {
 
         RLPlayer rlPlayer;
         RLConfig rlCfg;
-        rlCfg.trainEpisodes = 3000;
+        rlCfg.trainEpisodes = 10000;
         rlCfg.playMaxSteps = 800;
         rlCfg.coinCount = 30;
         rlCfg.trapCount = 20;

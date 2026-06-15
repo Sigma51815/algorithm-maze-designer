@@ -42,12 +42,12 @@ public:
     static QVector<MazeModel> generateHardMazes(int count, quint32 baseSeed);
 
 private:
-    static constexpr int ViewStates = 6561;
+    static constexpr int ViewStates = 65536;
     static constexpr int PassableBits = 16;
     static constexpr int StateSize = ViewStates * PassableBits;
     static constexpr int ActionCount = 4;
 
-    double qTable_[StateSize][ActionCount] = {};
+    QVector<double> qTable_;
 
     int encodeState(const MazeModel &maze, int cell, const QSet<int> &visited) const;
     int chooseAction(int state, double epsilon, std::mt19937 &rng) const;
