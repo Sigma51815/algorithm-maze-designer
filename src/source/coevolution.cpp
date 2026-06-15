@@ -1,6 +1,8 @@
 #include "coevolution.h"
 
 #include "ai/greedy_player.h"
+#include "maze_evaluator.h"
+#include "resource_placer.h"
 
 #include <algorithm>
 #include <numeric>
@@ -35,14 +37,30 @@ CoEvolResult CoEvolution::run(const CoEvolConfig &config) {
     }
 
     auto evalRLFitness = [&](MazeModel &maze) -> int {
-        maze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        if (config.useSmartPlacement) {
+            ResourcePlacerConfig pc;
+            pc.coinCount = config.coinCount;
+            pc.trapCount = config.trapCount;
+            pc.seed = resourceSeed;
+            ResourcePlacer::placeSmart(maze, pc);
+        } else {
+            maze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        }
         const int dpVal = maze.optimalResourceWalk().maxValue;
         const RLPlayResult rl = rlPlayer.play(maze, rlCfg);
         return dpVal - rl.totalResource;
     };
 
     auto evalDP = [&](MazeModel &maze) -> int {
-        maze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        if (config.useSmartPlacement) {
+            ResourcePlacerConfig pc;
+            pc.coinCount = config.coinCount;
+            pc.trapCount = config.trapCount;
+            pc.seed = resourceSeed;
+            ResourcePlacer::placeSmart(maze, pc);
+        } else {
+            maze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        }
         return maze.optimalResourceWalk().maxValue;
     };
 
@@ -107,16 +125,35 @@ CoEvolResult CoEvolution::run(const CoEvolConfig &config) {
         const int topK = std::min(config.rlTopK, popSize);
         for (int i = 0; i < topK; ++i) {
             MazeModel m = population[sortedIdx[i]];
-            m.placeResources(config.coinCount, config.trapCount, resourceSeed);
+            if (config.useSmartPlacement) {
+                ResourcePlacerConfig pc;
+                pc.coinCount = config.coinCount;
+                pc.trapCount = config.trapCount;
+                pc.seed = resourceSeed;
+                ResourcePlacer::placeSmart(m, pc);
+            } else {
+                m.placeResources(config.coinCount, config.trapCount, resourceSeed);
+            }
             hardestMazes.append(m);
         }
 
         rlPlayer.trainOnMazes(hardestMazes, rlCfg);
 
         MazeModel evalMaze = population[bestIdx];
-        evalMaze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        if (config.useSmartPlacement) {
+            ResourcePlacerConfig pc;
+            pc.coinCount = config.coinCount;
+            pc.trapCount = config.trapCount;
+            pc.seed = resourceSeed;
+            ResourcePlacer::placeSmart(evalMaze, pc);
+        } else {
+            evalMaze.placeResources(config.coinCount, config.trapCount, resourceSeed);
+        }
         const RLPlayResult rlResult = rlPlayer.play(evalMaze, rlCfg);
         result.rlScores.append(rlResult.totalResource);
+
+        double topoScore = MazeEvaluator::computeTopoDifficulty(result.bestMaze);
+        result.topoScores.append(topoScore);
 
         emit cycleFinished(cycle + 1, gaBest, rlResult.totalResource);
     }

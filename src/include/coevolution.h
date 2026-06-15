@@ -22,6 +22,8 @@ struct CoEvolConfig {
     // all four base algorithms so co-evolution builds *on top of* the four base
     // algorithms instead of a single one. When false, only baseAlgorithm is used.
     bool useMixedAlgorithms = true;
+    bool useSmartPlacement = true;
+    double topoWeight = 0.3;
 };
 
 struct CoEvolResult {
@@ -29,6 +31,7 @@ struct CoEvolResult {
     int bestFitness = 0;
     QVector<int> cycleBestFitness;
     QVector<int> rlScores;
+    QVector<double> topoScores;
 };
 
 class CoEvolution : public QObject {
