@@ -22,6 +22,7 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 
@@ -722,6 +723,7 @@ int main(int argc, char *argv[]) {
     bool headlessOptimizer = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--self-test") == 0) {
+            setenv("QT_QPA_PLATFORM", "offscreen", 1);
             QCoreApplication app(argc, argv);
             return runSelfTests();
         }
@@ -736,6 +738,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (headlessOptimizer) {
+        setenv("QT_QPA_PLATFORM", "offscreen", 1);
         QCoreApplication app(argc, argv);
         QTextStream out(stdout);
         QTextStream err(stderr);
