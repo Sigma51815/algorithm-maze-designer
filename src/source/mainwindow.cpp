@@ -961,6 +961,12 @@ void MainWindow::applyOptimizedMaze() {
     if (aiWorkerThread_) {
         aiWorkerThread_->quit();
         aiWorkerThread_->wait();
+        const auto children = aiWorkerThread_->children();
+        for (QObject *child : children) {
+            child->moveToThread(QThread::currentThread());
+        }
+        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
+        delete aiWorkerThread_;
         aiWorkerThread_ = nullptr;
     }
 
