@@ -664,6 +664,44 @@ int runSelfTests() {
                << ", smart_dp=" << smartDp.maxValue << '\n';
     }
 
+    {
+        OptimizerConfig cfg;
+        cfg.rows = 7;
+        cfg.columns = 7;
+        cfg.populationSize = 12;
+        cfg.generations = 10;
+        cfg.mutationRate = 0.3;
+        cfg.tournamentSize = 3;
+        cfg.seed = 80000U;
+        cfg.coinCount = 8;
+        cfg.trapCount = 5;
+        cfg.useMixedAlgorithms = true;
+        cfg.useSmartPlacement = true;
+        cfg.useEnhancedFitness = true;
+        cfg.topoWeight = 0.3;
+
+        MazeOptimizer optimizer;
+        optimizer.setConfig(cfg);
+        MazeModel best = optimizer.run();
+
+        if (!best.validatePerfect()) {
+            output << "FAIL end-to-end: invalid maze\n";
+            return 40;
+        }
+
+        EvaluatorConfig ec;
+        ec.useSmartPlacement = false;
+        ec.topoWeight = 0.3;
+        EvalResult eval = MazeEvaluator::evaluate(best, ec);
+
+        double topo = MazeEvaluator::computeTopoDifficulty(best);
+
+        output << QString::asprintf(
+            "PASS end-to-end: fitness=%.1f, dp=%d, greedy=%d, regret=%d, topo=%.2f\n",
+            eval.finalFitness, eval.dpScore, eval.worstGreedyScore,
+            eval.regretCombined, topo);
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }
