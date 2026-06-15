@@ -28,6 +28,9 @@ struct OptimizerConfig {
     // optimizes *on top of* the four base algorithms instead of a single one.
     // When false, only baseAlgorithm is used (legacy behaviour).
     bool useMixedAlgorithms = true;
+    bool useSmartPlacement = true;
+    bool useEnhancedFitness = true;
+    double topoWeight = 0.3;
 };
 
 struct OptimizerStats {

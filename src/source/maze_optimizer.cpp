@@ -1,6 +1,8 @@
 #include "maze_optimizer.h"
 
 #include "ai/greedy_player.h"
+#include "maze_evaluator.h"
+#include "resource_placer.h"
 
 #include <QQueue>
 #include <QSet>
@@ -138,28 +140,45 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
         ? algorithmForIndex(index)
         : config_.baseAlgorithm;
     chrom.maze.generate(config_.rows, config_.columns, algo, seed);
-    chrom.maze.placeResources(config_.coinCount, config_.trapCount, seed + 1000);
+    if (config_.useSmartPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = seed + 1000;
+        ResourcePlacer::placeSmart(chrom.maze, pc);
+    } else {
+        chrom.maze.placeResources(config_.coinCount, config_.trapCount, seed + 1000);
+    }
     return chrom;
 }
 
 double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
-    ResourcePlan dpPlan = chrom.maze.optimalResourceWalk();
-    chrom.dpScore = dpPlan.maxValue;
+    if (config_.useEnhancedFitness) {
+        EvaluatorConfig ec;
+        ec.useSmartPlacement = false;
+        ec.topoWeight = config_.topoWeight;
+        EvalResult eval = MazeEvaluator::evaluate(chrom.maze, ec);
+        chrom.dpScore = eval.dpScore;
+        chrom.greedyScore = eval.worstGreedyScore;
+        chrom.fitness = eval.finalFitness;
+    } else {
+        ResourcePlan dpPlan = chrom.maze.optimalResourceWalk();
+        chrom.dpScore = dpPlan.maxValue;
 
-    int worstGreedy = std::numeric_limits<int>::max();
-    const QVector<GreedyStrategy> strategies = {
-        GreedyStrategy::ValuePerStep,
-        GreedyStrategy::NearestFirst,
-        GreedyStrategy::AvoidTraps,
-        GreedyStrategy::EndGoalFirst
-    };
-    for (GreedyStrategy s : strategies) {
-        PlayResult result = GreedyPlayer::play(chrom.maze, {}, {}, 0, s);
-        worstGreedy = std::min(worstGreedy, result.remainingResource);
+        int worstGreedy = std::numeric_limits<int>::max();
+        const QVector<GreedyStrategy> strategies = {
+            GreedyStrategy::ValuePerStep,
+            GreedyStrategy::NearestFirst,
+            GreedyStrategy::AvoidTraps,
+            GreedyStrategy::EndGoalFirst
+        };
+        for (GreedyStrategy s : strategies) {
+            PlayResult result = GreedyPlayer::play(chrom.maze, {}, {}, 0, s);
+            worstGreedy = std::min(worstGreedy, result.remainingResource);
+        }
+        chrom.greedyScore = worstGreedy;
+        chrom.fitness = static_cast<double>(chrom.dpScore - chrom.greedyScore);
     }
-    chrom.greedyScore = worstGreedy;
-
-    chrom.fitness = static_cast<double>(chrom.dpScore - chrom.greedyScore);
     return chrom.fitness;
 }
 
@@ -224,7 +243,15 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
 
     Chromosome child;
     child.maze.setFromEdges(config_.rows, config_.columns, childEdges, rng_());
-    child.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+    if (config_.useSmartPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = rng_();
+        ResourcePlacer::placeSmart(child.maze, pc);
+    } else {
+        child.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+    }
     return child;
 }
 
@@ -237,7 +264,15 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
             ? algorithmForIndex(static_cast<int>(rng_() % 4))
             : config_.baseAlgorithm;
         chrom.maze.generate(config_.rows, config_.columns, algo, newSeed);
-        chrom.maze.placeResources(config_.coinCount, config_.trapCount, newSeed + 1000);
+        if (config_.useSmartPlacement) {
+            ResourcePlacerConfig pc;
+            pc.coinCount = config_.coinCount;
+            pc.trapCount = config_.trapCount;
+            pc.seed = newSeed + 1000;
+            ResourcePlacer::placeSmart(chrom.maze, pc);
+        } else {
+            chrom.maze.placeResources(config_.coinCount, config_.trapCount, newSeed + 1000);
+        }
         return;
     }
 
@@ -319,7 +354,15 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
     }
 
     chrom.maze.setFromEdges(rows, cols, newEdges, rng_());
-    chrom.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+    if (config_.useSmartPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = rng_();
+        ResourcePlacer::placeSmart(chrom.maze, pc);
+    } else {
+        chrom.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+    }
 }
 
 MazeOptimizer::Chromosome MazeOptimizer::tournamentSelect(
