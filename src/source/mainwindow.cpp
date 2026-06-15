@@ -868,6 +868,7 @@ void MainWindow::runOptimizer() {
     optimizer->setConfig(cfg);
 
     auto *thread = new QThread;
+    thread->setStackSize(8 * 1024 * 1024);
     optimizer->moveToThread(thread);
 
     connect(optimizer, &MazeOptimizer::generationFinished, this,
