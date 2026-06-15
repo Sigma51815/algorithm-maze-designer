@@ -21,6 +21,7 @@ add_executable(maze_designer
     src/include/ai/rl_player.h
     src/include/coevolution.h
     src/include/resource_placer.h
+    src/include/maze_evaluator.h
     src/source/main.cpp
     src/source/maze.cpp
     src/source/bosssolver.cpp
@@ -35,6 +36,7 @@ add_executable(maze_designer
     src/source/ai/rl_player.cpp
     src/source/coevolution.cpp
     src/source/resource_placer.cpp
+    src/source/maze_evaluator.cpp
 )
 
 target_include_directories(maze_designer PRIVATE
