@@ -96,3 +96,18 @@ double MazeEvaluator::computeTopoDifficulty(const MazeModel &maze) {
     return std::clamp(score, 0.0, 5.0);
 }
 
+int MazeEvaluator::evaluateGreedyWorst(const MazeModel &maze) {
+    int worst = std::numeric_limits<int>::max();
+    const QVector<GreedyStrategy> strategies = {
+        GreedyStrategy::ValuePerStep,
+        GreedyStrategy::NearestFirst,
+        GreedyStrategy::AvoidTraps,
+        GreedyStrategy::EndGoalFirst
+    };
+    for (GreedyStrategy s : strategies) {
+        PlayResult result = GreedyPlayer::play(maze, {}, {}, 0, s);
+        worst = std::min(worst, result.remainingResource);
+    }
+    return worst;
+}
+

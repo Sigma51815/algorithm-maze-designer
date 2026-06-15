@@ -29,4 +29,5 @@ class MazeEvaluator {
 public:
     static EvalResult evaluate(MazeModel &maze, const EvaluatorConfig &config);
     static double computeTopoDifficulty(const MazeModel &maze);
+    static int evaluateGreedyWorst(const MazeModel &maze);
 };
