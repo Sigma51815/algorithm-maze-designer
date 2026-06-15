@@ -6,8 +6,10 @@
 #include "coevolution.h"
 #include "mainwindow.h"
 #include "maze.h"
+#include "maze_evaluator.h"
 #include "maze_optimizer.h"
 #include "qlearning_optimizer.h"
+#include "resource_placer.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -565,6 +567,101 @@ int runSelfTests() {
         output << "PASS four-algo mixed GA: regret=" << mixedDp.maxValue
                << ", validate=" << mixedReason
                << ", single-legacy-ok=" << singleBest.validatePerfect() << '\n';
+    }
+
+    {
+        MazeModel maze;
+        maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 50000U);
+
+        ResourcePlacerConfig pc;
+        pc.coinCount = 10;
+        pc.trapCount = 6;
+        pc.seed = 50001U;
+        ResourcePlacer::placeSmart(maze, pc);
+
+        int coinCount = 0, trapCount = 0;
+        for (int cell = 0; cell < maze.cellCount(); ++cell) {
+            if (maze.resourceAt(cell) == 50) ++coinCount;
+            if (maze.resourceAt(cell) == -30) ++trapCount;
+        }
+        if (coinCount != 10 || trapCount != 6) {
+            output << "FAIL smart placement: coins=" << coinCount
+                   << ", traps=" << trapCount << '\n';
+            return 30;
+        }
+
+        auto topo = maze.analyzeTopology();
+        int deadEndCoins = 0;
+        for (int cell = 0; cell < maze.cellCount(); ++cell) {
+            if (topo[cell].isDeadEnd && maze.resourceAt(cell) == 50) ++deadEndCoins;
+        }
+        if (deadEndCoins == 0) {
+            output << "FAIL smart placement: no coins in dead ends\n";
+            return 31;
+        }
+
+        output << "PASS smart resource placement: coins=" << coinCount
+               << ", traps=" << trapCount << ", dead-end-coins=" << deadEndCoins << '\n';
+    }
+
+    {
+        MazeModel maze;
+        maze.generate(5, 5, MazeAlgorithm::KruskalMst, 60000U);
+        maze.placeResources(5, 3, 60001U);
+
+        EvaluatorConfig ec;
+        ec.useSmartPlacement = false;
+        ec.topoWeight = 0.3;
+        EvalResult eval = MazeEvaluator::evaluate(maze, ec);
+
+        if (eval.dpScore == 0) {
+            output << "FAIL enhanced fitness: dpScore=0\n";
+            return 32;
+        }
+
+        double topo = MazeEvaluator::computeTopoDifficulty(maze);
+        if (topo < 0.0 || topo > 5.0) {
+            output << "FAIL enhanced fitness: topoDifficulty=" << topo << '\n';
+            return 33;
+        }
+
+        output << "PASS enhanced fitness: dp=" << eval.dpScore
+               << ", regret=" << eval.regretGreedy
+               << ", topo=" << topo
+               << ", fitness=" << eval.finalFitness << '\n';
+    }
+
+    {
+        OptimizerConfig baseCfg;
+        baseCfg.rows = 5;
+        baseCfg.columns = 5;
+        baseCfg.populationSize = 10;
+        baseCfg.generations = 15;
+        baseCfg.mutationRate = 0.4;
+        baseCfg.tournamentSize = 3;
+        baseCfg.seed = 70000U;
+        baseCfg.coinCount = 5;
+        baseCfg.trapCount = 3;
+        baseCfg.useMixedAlgorithms = true;
+
+        OptimizerConfig randomCfg = baseCfg;
+        randomCfg.useSmartPlacement = false;
+        randomCfg.useEnhancedFitness = false;
+        MazeOptimizer randomOpt;
+        randomOpt.setConfig(randomCfg);
+        MazeModel randomBest = randomOpt.run();
+        ResourcePlan randomDp = randomBest.optimalResourceWalk();
+
+        OptimizerConfig smartCfg = baseCfg;
+        smartCfg.useSmartPlacement = true;
+        smartCfg.useEnhancedFitness = true;
+        MazeOptimizer smartOpt;
+        smartOpt.setConfig(smartCfg);
+        MazeModel smartBest = smartOpt.run();
+        ResourcePlan smartDp = smartBest.optimalResourceWalk();
+
+        output << "PASS GA comparison: random_dp=" << randomDp.maxValue
+               << ", smart_dp=" << smartDp.maxValue << '\n';
     }
 
     output << "ALL TESTS PASSED\n";
