@@ -19,8 +19,23 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
     ResourcePlan dp = maze.optimalResourceWalk();
     result.dpScore = dp.maxValue;
 
-    result.worstGreedyScore = evaluateGreedyWorst(maze);
-    result.bestGreedyScore = evaluateGreedyBest(maze);
+    {
+        const QVector<GreedyStrategy> strategies = {
+            GreedyStrategy::ValuePerStep,
+            GreedyStrategy::NearestFirst,
+            GreedyStrategy::AvoidTraps,
+            GreedyStrategy::EndGoalFirst
+        };
+        int worst = std::numeric_limits<int>::max();
+        int best = std::numeric_limits<int>::min();
+        for (GreedyStrategy s : strategies) {
+            PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
+            worst = std::min(worst, r.remainingResource);
+            best = std::max(best, r.remainingResource);
+        }
+        result.worstGreedyScore = worst;
+        result.bestGreedyScore = best;
+    }
     result.regretGreedy = result.dpScore - result.worstGreedyScore;
 
     if (config.evaluateAgainstRL) {
@@ -47,7 +62,6 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 double MazeEvaluator::computeTopoDifficulty(const MazeModel &maze) {
     if (maze.cellCount() == 0) return 0.0;
 
-    auto topo = maze.analyzeTopology();
     MazeStatistics stats = maze.statistics();
 
     double score = 0.0;
@@ -75,9 +89,8 @@ double MazeEvaluator::computeTopoDifficulty(const MazeModel &maze) {
         }
         shortestPath = dist[maze.endCell()];
     }
-    MazeStatistics st = maze.statistics();
     double pathRatio = shortestPath > 0
-        ? static_cast<double>(st.solutionLength) / shortestPath
+        ? static_cast<double>(stats.solutionLength) / shortestPath
         : 1.0;
     score += (pathRatio - 1.0) * 0.5;
 
@@ -87,32 +100,3 @@ double MazeEvaluator::computeTopoDifficulty(const MazeModel &maze) {
     return std::clamp(score, 0.0, 5.0);
 }
 
-int MazeEvaluator::evaluateGreedyWorst(const MazeModel &maze) {
-    int worst = std::numeric_limits<int>::max();
-    const QVector<GreedyStrategy> strategies = {
-        GreedyStrategy::ValuePerStep,
-        GreedyStrategy::NearestFirst,
-        GreedyStrategy::AvoidTraps,
-        GreedyStrategy::EndGoalFirst
-    };
-    for (GreedyStrategy s : strategies) {
-        PlayResult result = GreedyPlayer::play(maze, {}, {}, 0, s);
-        worst = std::min(worst, result.remainingResource);
-    }
-    return worst;
-}
-
-int MazeEvaluator::evaluateGreedyBest(const MazeModel &maze) {
-    int best = std::numeric_limits<int>::min();
-    const QVector<GreedyStrategy> strategies = {
-        GreedyStrategy::ValuePerStep,
-        GreedyStrategy::NearestFirst,
-        GreedyStrategy::AvoidTraps,
-        GreedyStrategy::EndGoalFirst
-    };
-    for (GreedyStrategy s : strategies) {
-        PlayResult result = GreedyPlayer::play(maze, {}, {}, 0, s);
-        best = std::max(best, result.remainingResource);
-    }
-    return best;
-}

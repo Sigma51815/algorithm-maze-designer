@@ -23,13 +23,10 @@ struct EvaluatorConfig {
     bool evaluateAgainstRL = false;
     RLConfig rlConfig;
     double topoWeight = 0.3;
-    quint32 resourceSeed = 42;
 };
 
 class MazeEvaluator {
 public:
     static EvalResult evaluate(MazeModel &maze, const EvaluatorConfig &config);
     static double computeTopoDifficulty(const MazeModel &maze);
-    static int evaluateGreedyWorst(const MazeModel &maze);
-    static int evaluateGreedyBest(const MazeModel &maze);
 };
