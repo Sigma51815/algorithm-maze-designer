@@ -548,6 +548,137 @@ MazeStatistics MazeModel::statistics() const {
     return result;
 }
 
+QVector<CellTopology> MazeModel::analyzeTopology() const {
+    QVector<CellTopology> result(cellCount());
+    if (cellCount() == 0) return result;
+
+    QVector<int> depth(cellCount(), -1);
+    QQueue<int> queue;
+    depth[startCell()] = 0;
+    queue.enqueue(startCell());
+
+    QVector<int> parent(cellCount(), -1);
+    parent[startCell()] = startCell();
+
+    while (!queue.isEmpty()) {
+        int cur = queue.dequeue();
+        for (int next : neighbors(cur)) {
+            if (depth[next] < 0) {
+                depth[next] = depth[cur] + 1;
+                parent[next] = cur;
+                queue.enqueue(next);
+            }
+        }
+    }
+
+    QVector<bool> onMainPath(cellCount(), false);
+    for (int cell = endCell();; cell = parent[cell]) {
+        onMainPath[cell] = true;
+        if (cell == startCell()) break;
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        result[cell].cell = cell;
+        result[cell].depth = depth[cell];
+        result[cell].onMainPath = onMainPath[cell];
+        int degree = neighbors(cell).size();
+        result[cell].isDeadEnd = (degree == 1 && cell != startCell() && cell != endCell());
+        result[cell].isJunction = (degree >= 3);
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (!result[cell].isDeadEnd) continue;
+        int d = 0;
+        int cur = cell;
+        int prev = -1;
+        while (cur >= 0) {
+            int degree = neighbors(cur).size();
+            if (degree >= 3 || cur == startCell() || cur == endCell()) break;
+            ++d;
+            int next = -1;
+            for (int n : neighbors(cur)) {
+                if (n != prev) { next = n; break; }
+            }
+            prev = cur;
+            cur = next;
+        }
+        cur = cell;
+        prev = -1;
+        int remaining = d;
+        while (remaining > 0 && cur >= 0) {
+            result[cur].branchDepth = remaining;
+            result[cur].corridorLength = d;
+            int next = -1;
+            for (int n : neighbors(cur)) {
+                if (n != prev) { next = n; break; }
+            }
+            prev = cur;
+            cur = next;
+            --remaining;
+        }
+    }
+
+    return result;
+}
+
+QVector<int> MazeModel::deadEndCells() const {
+    QVector<int> result;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (cell == startCell() || cell == endCell()) continue;
+        if (neighbors(cell).size() == 1) result.append(cell);
+    }
+    return result;
+}
+
+QVector<int> MazeModel::branchCells() const {
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> queue;
+    parent[startCell()] = startCell();
+    queue.enqueue(startCell());
+    while (!queue.isEmpty() && parent[endCell()] < 0) {
+        int cur = queue.dequeue();
+        for (int next : neighbors(cur)) {
+            if (parent[next] < 0) {
+                parent[next] = cur;
+                queue.enqueue(next);
+            }
+        }
+    }
+    QVector<bool> onMain(cellCount(), false);
+    for (int cell = endCell();; cell = parent[cell]) {
+        onMain[cell] = true;
+        if (cell == startCell()) break;
+    }
+    QVector<int> result;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (cell != startCell() && cell != endCell() && !onMain[cell])
+            result.append(cell);
+    }
+    return result;
+}
+
+QVector<int> MazeModel::mainPathCells() const {
+    QVector<int> parent(cellCount(), -1);
+    QQueue<int> queue;
+    parent[startCell()] = startCell();
+    queue.enqueue(startCell());
+    while (!queue.isEmpty() && parent[endCell()] < 0) {
+        int cur = queue.dequeue();
+        for (int next : neighbors(cur)) {
+            if (parent[next] < 0) {
+                parent[next] = cur;
+                queue.enqueue(next);
+            }
+        }
+    }
+    QVector<int> result;
+    for (int cell = endCell();; cell = parent[cell]) {
+        result.append(cell);
+        if (cell == startCell()) break;
+    }
+    return result;
+}
+
 ResourcePlan MazeModel::optimalResourceWalk() const {
     ResourcePlan result;
     if (cellCount() == 0) {

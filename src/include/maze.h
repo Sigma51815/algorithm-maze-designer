@@ -34,6 +34,16 @@ struct MazeStatistics {
     int longestCorridor = 0;
 };
 
+struct CellTopology {
+    int cell = -1;
+    int depth = 0;
+    int branchDepth = 0;
+    bool onMainPath = false;
+    bool isDeadEnd = false;
+    bool isJunction = false;
+    int corridorLength = 0;
+};
+
 class MazeModel {
 public:
     void generate(int rows, int columns, MazeAlgorithm algorithm, quint32 seed);
@@ -55,6 +65,10 @@ public:
 
     [[nodiscard]] bool validatePerfect(QString *reason = nullptr) const;
     [[nodiscard]] MazeStatistics statistics() const;
+    [[nodiscard]] QVector<CellTopology> analyzeTopology() const;
+    [[nodiscard]] QVector<int> deadEndCells() const;
+    [[nodiscard]] QVector<int> branchCells() const;
+    [[nodiscard]] QVector<int> mainPathCells() const;
     [[nodiscard]] ResourcePlan optimalResourceWalk() const;
     [[nodiscard]] QStringList expandedGrid() const;
     [[nodiscard]] QJsonObject toJson() const;
