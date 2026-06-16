@@ -399,6 +399,11 @@ void MainWindow::buildUi() {
     aiStatusLabel_->setObjectName(QStringLiteral("infoCard"));
     aiStatusLabel_->setVisible(false);
     aiLayout->addWidget(aiStatusLabel_);
+    aiResultLabel_ = new QLabel;
+    aiResultLabel_->setObjectName(QStringLiteral("infoCard"));
+    aiResultLabel_->setWordWrap(true);
+    aiResultLabel_->setVisible(false);
+    aiLayout->addWidget(aiResultLabel_);
     panelLayout->addWidget(aiGroup);
     connect(aiButton, &QPushButton::clicked, this, &MainWindow::runAiPlayer);
 
@@ -748,6 +753,7 @@ void MainWindow::runAiPlayer() {
 
     aiStatusLabel_->setText(QStringLiteral("⏳ AI 正在运行..."));
     aiStatusLabel_->setVisible(true);
+    if (aiResultLabel_) aiResultLabel_->setVisible(false);
 
     auto *thread = new QThread;
     thread->setStackSize(8 * 1024 * 1024);
@@ -778,6 +784,20 @@ void MainWindow::runAiPlayer() {
         revealedAiPoints_ = 1;
         mazeWidget_->setAiPath(lastAiResult_.walk, revealedAiPoints_);
         aiPathTimer_->start();
+
+        aiResultLabel_->setText(QStringLiteral(
+            "<b>AI 探险结果</b><br/>"
+            "剩余资源价值：<b>%1</b><br/>"
+            "所用步数：<b>%2</b><br/>"
+            "效率比值（价值/步数）：<b>%3</b><br/>"
+            "<span style='font-size:11px'>金币 %4 | 陷阱 %5</span>")
+            .arg(lastAiResult_.remainingResource)
+            .arg(lastAiResult_.totalSteps)
+            .arg(lastAiResult_.score, 0, 'f', 3)
+            .arg(lastAiResult_.collectedCoins)
+            .arg(lastAiResult_.triggeredTraps));
+        aiResultLabel_->setVisible(true);
+
         statusBar()->showMessage(
             QStringLiteral("AI 玩家完成：score=%1, 步数=%2, 金币=%3, 陷阱=%4")
                 .arg(lastAiResult_.score, 0, 'f', 2)
@@ -1002,6 +1022,7 @@ void MainWindow::applyOptimizedMaze() {
     mazeWidget_->setMaze(maze_);
     mazeWidget_->clearAiPath();
     if (aiStatusLabel_) aiStatusLabel_->setVisible(false);
+    if (aiResultLabel_) aiResultLabel_->setVisible(false);
 
     revealedEdges_ = static_cast<int>(maze_.generationSteps().size());
     mazeWidget_->setRevealCount(revealedEdges_);

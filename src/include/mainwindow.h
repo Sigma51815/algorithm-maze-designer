@@ -80,6 +80,7 @@ private:
     QObject *aiWorker_ = nullptr;
     QThread *optimizerThread_ = nullptr;
     QLabel *aiStatusLabel_ = nullptr;
+    QLabel *aiResultLabel_ = nullptr;
 
     void buildUi();
     void generateMaze();
