@@ -277,16 +277,13 @@ void MainWindow::buildUi() {
     optCompareLabel_->setVisible(false);
     generationLayout->addWidget(optCompareLabel_);
     connect(optCompareButton_, &QPushButton::clicked, this, [this]() {
-        if (!hasOptimizedMaze_ || maze_.cellCount() == 0) return;
-        MazeModel saved = maze_;  // current (possibly non-optimized) maze
+        if (!hasOptimizedMaze_ || preOptMaze_.cellCount() == 0) return;
 
-        // Evaluate current maze.
+        // Compare pre-optimization snapshot vs optimized result.
         EvaluatorConfig ec;
         ec.skipPlacement = true;
         ec.topoWeight = 0.3;
-        EvalResult before = MazeEvaluator::evaluate(saved, ec);
-
-        // Evaluate optimized maze.
+        EvalResult before = MazeEvaluator::evaluate(preOptMaze_, ec);
         EvalResult after = MazeEvaluator::evaluate(optimizedMaze_, ec);
 
         QString report;
@@ -1038,6 +1035,7 @@ void MainWindow::runOptimizer() {
     cfg.useAdversarialPlacement = optAdversarialCheck_->isChecked();
     cfg.useSmartPlacement = !cfg.useAdversarialPlacement;
     cfg.useEnhancedFitness = true;
+    preOptMaze_ = maze_;  // snapshot for before/after comparison
     cfg.topoWeight = 0.3;
 
     optRunButton_->setEnabled(false);
@@ -1119,6 +1117,43 @@ void MainWindow::runOptimizer() {
                         .arg(stats.longestCorridor)
                         .arg(stats.junctions));
                 optTopoLabel_->setVisible(true);
+
+                // Auto-show comparison between pre-optimization and optimized maze.
+                if (preOptMaze_.cellCount() > 0) {
+                    EvaluatorConfig ec;
+                    ec.skipPlacement = true;
+                    ec.topoWeight = 0.3;
+                    EvalResult before = MazeEvaluator::evaluate(preOptMaze_, ec);
+                    EvalResult after = MazeEvaluator::evaluate(optimizedMaze_, ec);
+                    QString report;
+                    report += QStringLiteral(
+                        "<b>对比评估（优化前 vs 优化后）</b><br/>"
+                        "<table style='border-spacing:8px 2px'>"
+                        "<tr><td></td><td><b>优化前</b></td><td><b>优化后</b></td></tr>"
+                        "<tr><td>金币漏拾率</td>"
+                            "<td>%1%</td><td>%2%</td></tr>"
+                        "<tr><td>陷阱命中率</td>"
+                            "<td>%3%</td><td>%4%</td></tr>"
+                        "<tr><td>路径迂回度</td>"
+                            "<td>%5%</td><td>%6%</td></tr>"
+                        "<tr><td>综合难度分</td>"
+                            "<td>%7</td><td style='color:#2E7D32'><b>%8</b></td></tr>"
+                        "</table>")
+                        .arg(before.coinMissRate * 100, 0, 'f', 1)
+                        .arg(after.coinMissRate * 100, 0, 'f', 1)
+                        .arg(before.trapHitRate * 100, 0, 'f', 1)
+                        .arg(after.trapHitRate * 100, 0, 'f', 1)
+                        .arg(before.pathInefficiency * 100, 0, 'f', 1)
+                        .arg(after.pathInefficiency * 100, 0, 'f', 1)
+                        .arg(before.finalFitness, 0, 'f', 1)
+                        .arg(after.finalFitness, 0, 'f', 1);
+                    bool improved = after.finalFitness > before.finalFitness;
+                    report += improved
+                        ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（难度分提升）</b>")
+                        : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化未变难</b>");
+                    optCompareLabel_->setText(report);
+                    optCompareLabel_->setVisible(true);
+                }
 
                 // Async cleanup — never block the main thread.
                 optimizer->deleteLater();

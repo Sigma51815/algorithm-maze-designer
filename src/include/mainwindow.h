@@ -66,6 +66,7 @@ private:
     QLabel *optTopoLabel_ = nullptr;
     QPushButton *optCompareButton_ = nullptr;
     QLabel *optCompareLabel_ = nullptr;
+    MazeModel preOptMaze_;        // snapshot before GA starts
     MazeModel optimizedMaze_;
     bool hasOptimizedMaze_ = false;
     OptimizerConfig lastOptConfig_;
