@@ -279,6 +279,34 @@ int runSelfTests() {
            << ", expanded=" << bossResult.expandedStates
            << ", pruned=" << bossResult.prunedStates << '\n';
 
+    {
+        MazeModel bossMaze;
+        bossMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 50000U);
+        bossMaze.placeResources(5, 3, 50001U);
+        BossFullResult fullResult = BossSolver::solveWithMaze(bossMaze, bosses, skills, 2);
+        if (!fullResult.solved) {
+            output << "FAIL solveWithMaze: not solved\n";
+            return 30;
+        }
+        if (fullResult.roundLimit != fullResult.minimumTurns + 2) {
+            output << "FAIL solveWithMaze: roundLimit=" << fullResult.roundLimit
+                   << " expected=" << (fullResult.minimumTurns + 2) << '\n';
+            return 31;
+        }
+        if (fullResult.coinConsumption < 1) {
+            output << "FAIL solveWithMaze: coinConsumption=" << fullResult.coinConsumption << '\n';
+            return 32;
+        }
+        if (fullResult.maxCoinsFromDP <= 0) {
+            output << "FAIL solveWithMaze: maxCoinsFromDP=" << fullResult.maxCoinsFromDP << '\n';
+            return 33;
+        }
+        output << "PASS solveWithMaze: minTurns=" << fullResult.minimumTurns
+               << ", roundLimit=" << fullResult.roundLimit
+               << ", coinCost=" << fullResult.coinConsumption
+               << ", dpCoins=" << fullResult.maxCoinsFromDP << '\n';
+    }
+
     MazeModel contractMaze;
     contractMaze.generate(7, 7, MazeAlgorithm::KruskalMst, 202506U);
     contractMaze.placeResources(8, 6, 202507U);

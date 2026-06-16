@@ -353,18 +353,8 @@ void MainWindow::buildUi() {
     skillsEdit_->setObjectName(QStringLiteral("inputControl"));
     skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却;..."));
     skillsEdit_->setToolTip(QStringLiteral("如 普通攻击:5:0;重击:10:2"));
-    extraTurnsSpin_ = new QSpinBox;
-    extraTurnsSpin_->setObjectName(QStringLiteral("inputControl"));
-    extraTurnsSpin_->setRange(1, 9999);
-    extraTurnsSpin_->setValue(20);
-    reviveCostSpin_ = new QSpinBox;
-    reviveCostSpin_->setObjectName(QStringLiteral("inputControl"));
-    reviveCostSpin_->setRange(0, 1000);
-    reviveCostSpin_->setValue(5);
     bossForm->addRow(QStringLiteral("血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能"), skillsEdit_);
-    bossForm->addRow(QStringLiteral("回合"), extraTurnsSpin_);
-    bossForm->addRow(QStringLiteral("复活"), reviveCostSpin_);
     bossLayout->addLayout(bossForm);
     auto *bossButtons = new QHBoxLayout;
     bossButtons->setSpacing(8);
@@ -681,11 +671,11 @@ void MainWindow::solveBossBattle() {
     const QVector<BossSkill> skills = parseSkills(&skillsOk);
     if (!healthOk || !skillsOk) {
         QMessageBox::warning(this, QStringLiteral("输入格式错误"),
-                             QStringLiteral("血量需为正整数列表；技能格式为“名称:伤害:冷却”，且至少有一个无冷却技能。"));
+                             QStringLiteral("血量需为正整数列表；技能格式为 名称:伤害:冷却，且至少有一个无冷却技能。"));
         return;
     }
 
-    lastBossResult_ = BossSolver::solve(health, skills);
+    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
     if (!lastBossResult_.solved
         || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
         bossOutput_->setPlainText(QStringLiteral("未找到可验证的技能序列。"));
@@ -702,13 +692,15 @@ void MainWindow::solveBossBattle() {
             "最少回合数    %1\n"
             "限定回合数    %2\n"
             "复活金币      %3\n"
+            "DP最优金币    %4\n"
             "────────────────────────────────\n"
-            "最优序列      %4\n"
+            "最优序列      %5\n"
             "────────────────────────────────\n"
-            "搜索展开 %5    剪枝 %6")
+            "搜索展开 %6    剪枝 %7")
             .arg(lastBossResult_.minimumTurns)
-            .arg(extraTurnsSpin_->value())
-            .arg(reviveCostSpin_->value())
+            .arg(lastBossResult_.roundLimit)
+            .arg(lastBossResult_.coinConsumption)
+            .arg(lastBossResult_.maxCoinsFromDP)
             .arg(sequenceNames.join(QStringLiteral(" → ")))
             .arg(lastBossResult_.expandedStates)
             .arg(lastBossResult_.prunedStates));
@@ -725,18 +717,26 @@ void MainWindow::showBattleAnimation() {
         return;
     }
 
-    lastBossResult_ = BossSolver::solve(health, skills);
-    if (!lastBossResult_.solved
-        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
+    BossFullResult fullResult = BossSolver::solveWithMaze(maze_, health, skills, 2);
+    if (!fullResult.solved
+        || !BossSolver::verify(health, skills, fullResult.skillSequence)) {
         QMessageBox::warning(this, QStringLiteral("无法开始战斗"),
                              QStringLiteral("当前参数没有得到可验证的技能序列。"));
         return;
     }
 
+    lastBossResult_ = fullResult;
+    BossResult basicResult;
+    basicResult.solved = fullResult.solved;
+    basicResult.minimumTurns = fullResult.minimumTurns;
+    basicResult.skillSequence = fullResult.skillSequence;
+    basicResult.expandedStates = fullResult.expandedStates;
+    basicResult.prunedStates = fullResult.prunedStates;
+
     auto *battleWindow = new BattleWindow(
-        health, skills, lastBossResult_,
-        extraTurnsSpin_->value(),
-        reviveCostSpin_->value(), this);
+        health, skills, basicResult,
+        fullResult.roundLimit,
+        fullResult.coinConsumption, this);
     battleWindow->show();
     battleWindow->raise();
     battleWindow->activateWindow();
@@ -845,7 +845,7 @@ void MainWindow::exportMaze() {
                              QStringLiteral("请先填写正确的 BOSS 血量与玩家技能。"));
         return;
     }
-    lastBossResult_ = BossSolver::solve(health, skills);
+    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
     if (!lastBossResult_.solved) {
         QMessageBox::warning(this, QStringLiteral("无法导出"),
                              QStringLiteral("当前 BOSS 参数没有可行技能序列。"));
@@ -863,7 +863,7 @@ void MainWindow::exportMaze() {
     }
 
     const QByteArray exportedJson = serializeAiPlayerInput(
-        maze_, health, skills, extraTurnsSpin_->value(), reviveCostSpin_->value());
+        maze_, health, skills, lastBossResult_.roundLimit, lastBossResult_.coinConsumption);
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)

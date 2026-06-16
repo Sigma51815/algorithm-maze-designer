@@ -29,7 +29,7 @@ public:
 private:
     MazeModel maze_;
     ResourcePlan lastPlan_;
-    BossResult lastBossResult_;
+    BossFullResult lastBossResult_;
     PlayResult lastAiResult_;
     MazeWidget *mazeWidget_ = nullptr;
     QComboBox *algorithmBox_ = nullptr;
@@ -43,8 +43,6 @@ private:
     QLabel *resourceResultLabel_ = nullptr;
     QLineEdit *bossHealthEdit_ = nullptr;
     QLineEdit *skillsEdit_ = nullptr;
-    QSpinBox *extraTurnsSpin_ = nullptr;
-    QSpinBox *reviveCostSpin_ = nullptr;
     QPlainTextEdit *bossOutput_ = nullptr;
     QTimer *generationTimer_ = nullptr;
     QTimer *pathTimer_ = nullptr;

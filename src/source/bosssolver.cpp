@@ -1,5 +1,7 @@
 #include "bosssolver.h"
 
+#include "maze.h"
+
 #include <QHash>
 
 #include <algorithm>
@@ -188,4 +190,27 @@ bool BossSolver::verify(const QVector<int> &bossHealth,
         applySkill(health, cooldowns, skills, skillIndex);
     }
     return firstLivingBoss(health) < 0;
+}
+
+BossFullResult BossSolver::solveWithMaze(const MazeModel &maze,
+                                          const QVector<int> &bossHealth,
+                                          const QVector<BossSkill> &skills,
+                                          int extraTurns) {
+    BossFullResult result;
+    BossResult basic = solve(bossHealth, skills);
+    if (!basic.solved) return result;
+
+    result.solved = true;
+    result.minimumTurns = basic.minimumTurns;
+    result.skillSequence = basic.skillSequence;
+    result.expandedStates = basic.expandedStates;
+    result.prunedStates = basic.prunedStates;
+
+    ResourcePlan dp = maze.optimalResourceWalk();
+    result.maxCoinsFromDP = dp.maxValue;
+
+    result.roundLimit = basic.minimumTurns + extraTurns;
+    result.coinConsumption = std::max(1, dp.maxValue - 1);
+
+    return result;
 }
