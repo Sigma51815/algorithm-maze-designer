@@ -205,12 +205,12 @@ void MainWindow::buildUi() {
     optForm->addRow(QStringLiteral("变异率"), optMutSpin_);
     optForm->addRow(QStringLiteral("初始种群"), optAlgoLabel_);
 
-    optSmartPlaceCheck_ = new QCheckBox(QStringLiteral("智能资源分布"));
-    optSmartPlaceCheck_->setObjectName(QStringLiteral("inputControl"));
-    optSmartPlaceCheck_->setChecked(true);
-    optSmartPlaceCheck_->setToolTip(QStringLiteral(
-        "基于迷宫拓扑分析放置资源：金币放死胡同深处诱导AI，陷阱放分叉口迫使决策"));
-    optForm->addRow(QStringLiteral("资源策略"), optSmartPlaceCheck_);
+    optAdversarialCheck_ = new QCheckBox(QStringLiteral("对抗式优化"));
+    optAdversarialCheck_->setObjectName(QStringLiteral("inputControl"));
+    optAdversarialCheck_->setChecked(true);
+    optAdversarialCheck_->setToolTip(QStringLiteral(
+        "对抗式资源分布：陷阱放分叉口挡路，金币藏深处，最小化AI分数"));
+    optForm->addRow(QStringLiteral("优化模式"), optAdversarialCheck_);
 
     optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
     optRLCheck_->setObjectName(QStringLiteral("inputControl"));
@@ -1016,7 +1016,8 @@ void MainWindow::runOptimizer() {
     cfg.rlEpisodes = optRLEpisodesSpin_->value();
     cfg.rlTopK = optRLTopKSpin_->value();
     cfg.useMixedAlgorithms = true;
-    cfg.useSmartPlacement = optSmartPlaceCheck_->isChecked();
+    cfg.useAdversarialPlacement = optAdversarialCheck_->isChecked();
+    cfg.useSmartPlacement = !cfg.useAdversarialPlacement;
     cfg.useEnhancedFitness = true;
     cfg.topoWeight = 0.3;
 

@@ -62,7 +62,7 @@ private:
     QPushButton *optStopButton_ = nullptr;
     QPushButton *optApplyButton_ = nullptr;
     QPushButton *optSaveButton_ = nullptr;
-    QCheckBox *optSmartPlaceCheck_ = nullptr;
+    QCheckBox *optAdversarialCheck_ = nullptr;
     QLabel *optTopoLabel_ = nullptr;
     QCheckBox *optRLCheck_ = nullptr;
     QSpinBox *optRLEpisodesSpin_ = nullptr;
