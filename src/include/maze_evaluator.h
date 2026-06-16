@@ -13,6 +13,10 @@ struct EvalResult {
     int regretGreedy = 0;
     int regretRL = 0;
     int regretCombined = 0;
+    double worstAIScore = 0.0;
+    double coinMissRate = 0.0;
+    double trapHitRate = 0.0;
+    double pathInefficiency = 0.0;
     double topoDifficulty = 0;
     double finalFitness = 0;
 };
@@ -20,6 +24,7 @@ struct EvalResult {
 struct EvaluatorConfig {
     bool useSmartPlacement = true;
     bool useAdversarialPlacement = false;
+    bool skipPlacement = false;
     ResourcePlacerConfig placerConfig;
     bool evaluateAgainstRL = false;
     RLConfig rlConfig;
