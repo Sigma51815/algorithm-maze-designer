@@ -729,10 +729,18 @@ int runSelfTests() {
         int smartGreedy = MazeEvaluator::evaluateGreedyWorst(smartBest);
         int smartRegret = smartDp.maxValue - smartGreedy;
 
-        output << "PASS GA comparison: random_regret=" << randomRegret
-               << ", smart_regret=" << smartRegret
-               << " (random_dp=" << randomDp.maxValue
-               << " smart_dp=" << smartDp.maxValue << ")\n";
+        PlayResult randomPlay = GreedyPlayer::play(randomBest);
+        PlayResult smartPlay = GreedyPlayer::play(smartBest);
+
+        output << "PASS GA comparison:\n"
+               << "  random: dp=" << randomDp.maxValue << " greedy=" << randomGreedy
+               << " regret=" << randomRegret
+               << " ai_score=" << randomPlay.score
+               << " ai_steps=" << randomPlay.totalSteps << '\n'
+               << "  smart:  dp=" << smartDp.maxValue << " greedy=" << smartGreedy
+               << " regret=" << smartRegret
+               << " ai_score=" << smartPlay.score
+               << " ai_steps=" << smartPlay.totalSteps << '\n';
     }
 
     {
