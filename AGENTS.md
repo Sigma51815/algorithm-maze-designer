@@ -171,17 +171,21 @@ src/
 
 | 文件 | 内容 |
 |------|------|
+| `PROJ_GUIDE.md` | **项目交接指南**（组长端 AI Agent 入口）— 筛查/检查/强化方向 |
 | `docs/任务设计书.md` | 任务规范、评分标准 |
-| `docs/方案甲_迷宫设计.md` | 迷宫设计方案 + PAIRED/GA 优化 + 边界压榨策略 |
-| `docs/方案乙_AI玩家.md` | AI 玩家方案：贪心 / Q-Learning / DRQN |
-| `docs/算法课程设计思路.md` | 整体设计思路、博弈论分析 |
-| `docs/input说明.txt` | 交叉测试 JSON 格式规范 |
-| `SERVER_GUIDE.md` | 服务器部署指南（无头优化器运行） |
+| `docs/方案设计思路/方案甲_迷宫设计.md` | 迷宫设计方案 + PAIRED/GA 优化 + 边界压榨策略 |
+| `docs/方案设计思路/方案乙_AI玩家.md` | AI 玩家方案：贪心 / Q-Learning / DRQN |
+| `docs/方案设计思路/OPTIMIZER_GUIDE.md` | 优化器使用指南 |
+| `docs/输入输出说明/input说明.txt` | 交叉测试 JSON 格式规范 |
+| `docs/QA_CHECKLIST.md` | QA 验收检查清单 |
+| `docs/QA_HANDOFF_REPORT.md` | 三轮 QA 审查最终交接报告（14 项已修复 + 30 项待处理） |
+| `docs/BUG_ANALYSIS.md` | 原始 bug 分析（GA 优化后 AI 分数变高） |
 
 ## 已知问题
 
-- RL 自测偶尔 flaky（~20% 失败率）— Q-Learning 随机初始化导致 before 分数波动大
+- RL 自测偶尔 flaky（~20% 失败率）— 详见 `docs/QA_HANDOFF_REPORT.md` RL-1~RL-4
 - `minRouds` JSON key 拼写错误（应为 minRounds）— 保持兼容不改
+- 更多待处理问题见 `PROJ_GUIDE.md` 第五~七节
 
 ## 后续发展方向
 
