@@ -1129,6 +1129,7 @@ void MainWindow::runOptimizer() {
 
     connect(thread, &QThread::started, optimizer, [optimizer]() {
         optimizer->run();
+        QThread::currentThread()->quit();
     });
 
     optimizerThread_ = thread;
