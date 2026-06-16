@@ -2,6 +2,7 @@
 
 #include "bosssolver.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -82,6 +83,10 @@ public:
     [[nodiscard]] QVector<MazeEdge> allEdges() const;
     void setFromEdges(int rows, int columns, const QVector<MazeEdge> &edges, quint32 seed);
     void setResources(const QVector<int> &resources);
+
+    [[nodiscard]] static bool fromExpandedGrid(const QJsonArray &matrix,
+                                                MazeModel &out,
+                                                QString *error = nullptr);
 
 private:
     static constexpr int Up = 0;

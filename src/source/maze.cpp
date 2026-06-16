@@ -960,6 +960,89 @@ void MazeModel::setResources(const QVector<int> &resources) {
     resources_ = resources;
 }
 
+bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
+                                  QString *error) {
+    if (matrix.isEmpty()) {
+        if (error) *error = QStringLiteral("迷宫矩阵为空");
+        return false;
+    }
+
+    QStringList grid;
+    for (const QJsonValue &rowVal : matrix) {
+        if (rowVal.isString()) {
+            grid.append(rowVal.toString());
+        } else if (rowVal.isArray()) {
+            const QJsonArray row = rowVal.toArray();
+            QString line;
+            for (const QJsonValue &cellVal : row) line += cellVal.toString();
+            grid.append(line);
+        } else {
+            if (error) *error = QStringLiteral("无效的行格式");
+            return false;
+        }
+    }
+
+    const int gridRows = grid.size();
+    const int gridCols = grid.isEmpty() ? 0 : grid.first().size();
+    if (gridRows < 3 || gridCols < 3 || gridRows % 2 == 0 || gridCols % 2 == 0) {
+        if (error) *error = QStringLiteral("迷宫尺寸无效（需奇数×奇数且≥3）");
+        return false;
+    }
+
+    const int logicalRows = (gridRows - 1) / 2;
+    const int logicalCols = (gridCols - 1) / 2;
+    const int totalCells = logicalRows * logicalCols;
+
+    out.reset(logicalRows, logicalCols, 42);
+
+    int startCell = -1;
+    int endCell = -1;
+    int bossCell = -1;
+    QVector<int> resources(totalCells, 0);
+    QVector<MazeEdge> edges;
+
+    for (int r = 0; r < logicalRows; ++r) {
+        for (int c = 0; c < logicalCols; ++c) {
+            const int gr = r * 2 + 1;
+            const int gc = c * 2 + 1;
+            const int cell = r * logicalCols + c;
+            const QChar ch = grid[gr][gc];
+
+            if (ch == QLatin1Char('S')) startCell = cell;
+            else if (ch == QLatin1Char('E')) endCell = cell;
+            else if (ch == QLatin1Char('B')) bossCell = cell;
+            else if (ch == QLatin1Char('G')) resources[cell] = 50;
+            else if (ch == QLatin1Char('T')) resources[cell] = -30;
+
+            if (c + 1 < logicalCols) {
+                const int wallCol = gc + 1;
+                if (wallCol < gridCols && grid[gr][wallCol] != QLatin1Char('#')) {
+                    edges.append({cell, cell + 1});
+                }
+            }
+            if (r + 1 < logicalRows) {
+                const int wallRow = gr + 1;
+                if (wallRow < gridRows && grid[wallRow][gc] != QLatin1Char('#')) {
+                    edges.append({cell, cell + logicalCols});
+                }
+            }
+        }
+    }
+
+    if (startCell < 0 || endCell < 0) {
+        if (error) *error = QStringLiteral("未找到起点(S)或终点(E)");
+        return false;
+    }
+
+    out.setFromEdges(logicalRows, logicalCols, edges, 42);
+    out.setResources(resources);
+    if (bossCell >= 0) out.setBossCell(bossCell);
+    out.startCell_ = startCell;
+    out.endCell_ = endCell;
+
+    return true;
+}
+
 MazeModel MazeModel::extractSubArea(int centerCell) const {
     MazeModel sub;
     const int cr = rowOf(centerCell);

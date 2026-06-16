@@ -408,6 +408,11 @@ void MainWindow::buildUi() {
 
     panelLayout->addWidget(makeSeparator());
 
+    auto *loadButton = new QPushButton(QStringLiteral("加载迷宫 JSON"));
+    loadButton->setObjectName(QStringLiteral("secondaryButton"));
+    panelLayout->addWidget(loadButton);
+    connect(loadButton, &QPushButton::clicked, this, &MainWindow::loadMaze);
+
     auto *exportButton = new QPushButton(QStringLiteral("导出 AI 玩家 JSON"));
     exportButton->setObjectName(QStringLiteral("secondaryButton"));
     panelLayout->addWidget(exportButton);
@@ -749,6 +754,113 @@ void MainWindow::showBattleAnimation() {
     battleWindow->show();
     battleWindow->raise();
     battleWindow->activateWindow();
+}
+
+void MainWindow::loadMaze() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, QStringLiteral("加载迷宫 JSON"), QString(),
+        QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::critical(this, QStringLiteral("加载失败"),
+                              QStringLiteral("无法打开文件：%1").arg(file.errorString()));
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        QMessageBox::critical(this, QStringLiteral("格式错误"),
+                              QStringLiteral("JSON 解析失败：%1").arg(parseError.errorString()));
+        return;
+    }
+
+    const QJsonObject root = doc.object();
+    MazeModel loaded;
+    bool ok = false;
+
+    if (root.contains(QStringLiteral("maze"))) {
+        QString err;
+        ok = MazeModel::fromExpandedGrid(root.value(QStringLiteral("maze")).toArray(),
+                                          loaded, &err);
+        if (!ok) {
+            QMessageBox::critical(this, QStringLiteral("格式错误"), err);
+            return;
+        }
+    } else if (root.value(QStringLiteral("format")).toString()
+                   == QStringLiteral("algorithm-maze-v1")) {
+        SavedMazeInfo info;
+        ok = MazeSaver::loadMazeFromJson(root, info);
+        if (!ok) {
+            QMessageBox::critical(this, QStringLiteral("格式错误"),
+                                  QStringLiteral("无法解析原生迷宫格式"));
+            return;
+        }
+        loaded = info.maze;
+    } else if (root.value(QStringLiteral("format")).toString()
+                   == QStringLiteral("ga-result-v1")) {
+        const QJsonObject bestMaze = root.value(QStringLiteral("bestMaze")).toObject();
+        SavedMazeInfo info;
+        ok = MazeSaver::loadMazeFromJson(bestMaze, info);
+        if (!ok) {
+            QMessageBox::critical(this, QStringLiteral("格式错误"),
+                                  QStringLiteral("无法解析 GA 结果格式"));
+            return;
+        }
+        loaded = info.maze;
+    } else {
+        QMessageBox::critical(this, QStringLiteral("格式错误"),
+                              QStringLiteral("未识别的 JSON 格式"));
+        return;
+    }
+
+    generationTimer_->stop();
+    pathTimer_->stop();
+    aiPathTimer_->stop();
+    stopAiWorker();
+
+    maze_ = loaded;
+    lastPlan_ = {};
+    lastBossResult_ = {};
+    lastAiResult_ = {};
+    revealedEdges_ = 0;
+    revealedPathPoints_ = 0;
+    revealedAiPoints_ = 0;
+
+    mazeWidget_->setMaze(maze_);
+    mazeWidget_->clearAiPath();
+    mazeWidget_->clearSolutionPath();
+    if (aiStatusLabel_) aiStatusLabel_->setVisible(false);
+    resourceResultLabel_->setText(QStringLiteral("尚未求解"));
+
+    rowsSpin_->setValue(maze_.rows() * 2 + 1);
+    columnsSpin_->setValue(maze_.columns() * 2 + 1);
+    updateValidation();
+
+    if (root.contains(QStringLiteral("B"))) {
+        const QJsonArray bosses = root.value(QStringLiteral("B")).toArray();
+        QStringList healthParts;
+        for (const QJsonValue &v : bosses) healthParts.append(QString::number(v.toInt()));
+        bossHealthEdit_->setText(healthParts.join(QLatin1Char(',')));
+    }
+    if (root.contains(QStringLiteral("PlayerSkills"))) {
+        const QJsonArray skills = root.value(QStringLiteral("PlayerSkills")).toArray();
+        QStringList skillParts;
+        for (const QJsonValue &v : skills) {
+            const QJsonArray pair = v.toArray();
+            if (pair.size() >= 2) {
+                skillParts.append(QStringLiteral("技能%1:%2:%3")
+                    .arg(skillParts.size() + 1)
+                    .arg(pair[0].toInt())
+                    .arg(pair[1].toInt()));
+            }
+        }
+        if (!skillParts.isEmpty()) skillsEdit_->setText(skillParts.join(QLatin1Char(';')));
+    }
+
+    statusBar()->showMessage(QStringLiteral("已加载：%1").arg(path), 5000);
 }
 
 void MainWindow::runAiPlayer() {

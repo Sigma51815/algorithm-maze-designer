@@ -376,6 +376,41 @@ int runSelfTests() {
     output << "PASS AI JSON contract: exact field order and compact 15x15 rows\n";
 
     {
+        MazeModel original;
+        original.generate(5, 5, MazeAlgorithm::KruskalMst, 80000U);
+        original.placeResources(5, 3, 80001U);
+        original.setBossCell(original.cellCount() / 2);
+        const QJsonObject exported = original.toJson();
+        const QJsonArray matrix = exported.value(QStringLiteral("expandedMatrix")).toArray();
+
+        MazeModel loaded;
+        QString err;
+        bool ok = MazeModel::fromExpandedGrid(matrix, loaded, &err);
+        if (!ok) {
+            output << "FAIL fromExpandedGrid: " << err << '\n';
+            return 40;
+        }
+        if (loaded.rows() != original.rows() || loaded.columns() != original.columns()) {
+            output << "FAIL fromExpandedGrid: dimension mismatch\n";
+            return 41;
+        }
+        if (loaded.startCell() != original.startCell()
+            || loaded.endCell() != original.endCell()) {
+            output << "FAIL fromExpandedGrid: start/end mismatch\n";
+            return 42;
+        }
+        ResourcePlan loadedDp = loaded.optimalResourceWalk();
+        ResourcePlan originalDp = original.optimalResourceWalk();
+        if (loadedDp.maxValue != originalDp.maxValue) {
+            output << "FAIL fromExpandedGrid: dp mismatch " << loadedDp.maxValue
+                   << " vs " << originalDp.maxValue << '\n';
+            return 43;
+        }
+        output << "PASS fromExpandedGrid: " << loaded.rows() << "x" << loaded.columns()
+               << ", dp=" << loadedDp.maxValue << '\n';
+    }
+
+    {
         MazeModel maze;
         maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
         maze.placeResources(28, 18, static_cast<quint32>(42));

@@ -88,6 +88,7 @@ private:
     void solveBossBattle();
     void showBattleAnimation();
     void exportMaze();
+    void loadMaze();
     void runAiPlayer();
     void runOptimizer();
     void applyOptimizedMaze();
