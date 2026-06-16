@@ -650,7 +650,6 @@ void MainWindow::solveBossBattle() {
             "最少回合数    %1\n"
             "限定回合数    %2\n"
             "复活金币      %3\n"
-            "DP最优金币    %4\n"
             "────────────────────────────────\n"
             "最优序列      %5\n"
             "────────────────────────────────\n"
@@ -960,7 +959,6 @@ void MainWindow::runOptimizer() {
     preOptMaze_ = maze_;  // snapshot for before/after comparison
     cfg.topoWeight = 0.3;
 
-    optResultLabel_->setVisible(false);
     optProgressLabel_->setText(QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
 
     auto *optimizer = new MazeOptimizer;
@@ -973,9 +971,8 @@ void MainWindow::runOptimizer() {
 
     connect(optimizer, &MazeOptimizer::generationFinished, this,
             [this, cfg](const OptimizerStats &stats) {
-                QString rlTag = stats.rlUsed ? QStringLiteral(" + RL精调") : QString();
                 optProgressLabel_->setText(
-                    QStringLiteral("第 %1 / %2 代%8  |  最优适应度 %3  |  平均 %4<br/>"
+                    QStringLiteral("第 %1 / %2 代  |  最优适应度 %3  |  平均 %4<br/>"
                                    "DP最优 %5  |  Greedy %6  |  Regret %7")
                         .arg(stats.generation)
                         .arg(cfg.generations)
@@ -983,8 +980,7 @@ void MainWindow::runOptimizer() {
                         .arg(stats.avgFitness, 0, 'f', 1)
                         .arg(stats.bestDpScore)
                         .arg(stats.bestGreedyScore)
-                        .arg(stats.bestDpScore - stats.bestGreedyScore)
-                        .arg(rlTag));
+                        .arg(stats.bestDpScore - stats.bestGreedyScore));
             });
 
 
@@ -1015,24 +1011,9 @@ void MainWindow::runOptimizer() {
                 lastOptGreedyScore_ = worstGreedy;
                 lastOptFitness_ = dp.maxValue - worstGreedy;
 
-                optResultLabel_->setText(
-                    QStringLiteral("<b>优化完成</b>  |  Regret = %1<br/>"
-                                   "DP最优 %2  |  Greedy %3  |  差距 %4")
-                        .arg(lastOptFitness_)
-                        .arg(lastOptDpScore_)
-                        .arg(lastOptGreedyScore_)
-                        .arg(lastOptFitness_));
-                optResultLabel_->setVisible(true);
 
                 MazeStatistics stats = optimizedMaze_.statistics();
                 double topoDiff = MazeEvaluator::computeTopoDifficulty(optimizedMaze_);
-                optTopoLabel_->setText(
-                    QStringLiteral("拓扑难度 %1  |  死胡同 %2  |  最长走廊 %3  |  分叉口 %4")
-                        .arg(topoDiff, 0, 'f', 2)
-                        .arg(stats.deadEnds)
-                        .arg(stats.longestCorridor)
-                        .arg(stats.junctions));
-                optTopoLabel_->setVisible(true);
 
                 // Auto-show comparison between pre-optimization and optimized maze.
                 if (preOptMaze_.cellCount() > 0) {
