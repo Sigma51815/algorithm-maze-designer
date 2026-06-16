@@ -61,6 +61,7 @@ private:
     QPushButton *optSaveButton_ = nullptr;
     QCheckBox *optAdversarialCheck_ = nullptr;
     QLabel *optCompareLabel_ = nullptr;
+    int generationId_ = 0;        // incremented on each generateMaze(); guards stale GA callbacks
     MazeModel preOptMaze_;        // snapshot before GA starts
     MazeModel optimizedMaze_;
     bool hasOptimizedMaze_ = false;

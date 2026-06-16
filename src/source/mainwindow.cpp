@@ -44,22 +44,34 @@ void MainWindow::stopAiWorker() {
     if (!aiWorkerThread_) return;
     // Disconnect BEFORE quit/wait so the finished lambda won't fire on a deleted thread.
     disconnect(aiWorkerThread_, nullptr, nullptr, nullptr);
+    // Schedule deletion on the worker thread while its event loop is still running,
+    // so the DeferredDelete event is processed before quit stops the loop.
+    if (aiWorker_) { aiWorker_->deleteLater(); aiWorker_ = nullptr; }
     aiWorkerThread_->quit();
     aiWorkerThread_->wait();
     aiWorkerThread_->deleteLater();
-    if (aiWorker_) { aiWorker_->deleteLater(); aiWorker_ = nullptr; }
     aiWorkerThread_ = nullptr;
+    // Re-enable the generate button in case it was disabled during a running AI.
+    if (generateButton_) generateButton_->setEnabled(true);
 }
 
 void MainWindow::stopOptimizer() {
     if (!optimizerThread_) return;
-    // Disconnect BEFORE quit/wait so the finished lambda won't fire on a deleted thread.
+    // Signal the GA loop to stop early so quit()+wait() returns quickly.
+    if (optimizer_) optimizer_->stop();
+    // Disconnect ALL signals (both thread-sender and optimizer-sender) so
+    // the finished/generationFinished lambdas won't fire during/after cleanup.
+    if (optimizer_) disconnect(optimizer_, nullptr, nullptr, nullptr);
     disconnect(optimizerThread_, nullptr, nullptr, nullptr);
+    // Schedule deletion on the worker thread while its event loop is still running,
+    // so the DeferredDelete event is processed before quit stops the loop.
+    if (optimizer_) { optimizer_->deleteLater(); optimizer_ = nullptr; }
     optimizerThread_->quit();
     optimizerThread_->wait();
     optimizerThread_->deleteLater();
-    if (optimizer_) { optimizer_->deleteLater(); optimizer_ = nullptr; }
     optimizerThread_ = nullptr;
+    // Re-enable the generate button in case it was disabled during a running GA.
+    if (generateButton_) generateButton_->setEnabled(true);
 }
 
 MainWindow::~MainWindow() {
@@ -516,6 +528,8 @@ void MainWindow::buildUi() {
 }
 
 void MainWindow::generateMaze() {
+    stopOptimizer();   // stop any running GA before replacing the maze
+    stopAiWorker();    // stop any running AI before replacing the maze
     generationTimer_->stop();
     pathTimer_->stop();
     aiPathTimer_->stop();
@@ -545,6 +559,13 @@ void MainWindow::generateMaze() {
     generationTimer_->setInterval(animationSpin_->value());
     generationTimer_->start();
     updateValidation();
+    // Clear stale GA state so old comparison tables / save buttons don't persist.
+    hasOptimizedMaze_ = false;
+    optimizedMaze_ = {};
+    preOptMaze_ = {};
+    optCompareLabel_->setVisible(false);
+    optSaveButton_->setEnabled(false);
+    ++generationId_;   // bump so any in-flight GA callback can detect staleness
 }
 
 void MainWindow::placeResources() {
@@ -662,6 +683,7 @@ void MainWindow::solveBossBattle() {
             "最少回合数    %1\n"
             "限定回合数    %2\n"
             "复活金币      %3\n"
+            "DP 最大金币   %4\n"
             "────────────────────────────────\n"
             "最优序列      %5\n"
             "────────────────────────────────\n"
@@ -774,6 +796,7 @@ void MainWindow::loadMaze() {
     generationTimer_->stop();
     pathTimer_->stop();
     aiPathTimer_->stop();
+    stopOptimizer();
     stopAiWorker();
 
     maze_ = loaded;
@@ -793,6 +816,12 @@ void MainWindow::loadMaze() {
     rowsSpin_->setValue(maze_.rows() * 2 + 1);
     columnsSpin_->setValue(maze_.columns() * 2 + 1);
     updateValidation();
+    // Clear stale GA state from any previous optimization run.
+    hasOptimizedMaze_ = false;
+    optimizedMaze_ = {};
+    preOptMaze_ = {};
+    optCompareLabel_->setVisible(false);
+    optSaveButton_->setEnabled(false);
 
     if (root.contains(QStringLiteral("B"))) {
         const QJsonArray bosses = root.value(QStringLiteral("B")).toArray();
@@ -822,6 +851,8 @@ void MainWindow::runAiPlayer() {
     if (maze_.cellCount() == 0 || aiWorkerThread_) {
         return;
     }
+    generateButton_->setEnabled(false);  // prevent re-entry while AI is running
+    const int genAtStart = generationId_;  // capture for staleness detection
     generationTimer_->stop();
     aiPathTimer_->stop();
     mazeWidget_->clearAiPath();
@@ -841,10 +872,19 @@ void MainWindow::runAiPlayer() {
 
     connect(thread, &QThread::started, worker, [worker, mazeCopy, resultCopy]() {
         *resultCopy = GreedyPlayer::play(*mazeCopy);
+        worker->deleteLater();  // schedule deletion while event loop is running
         QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
     });
 
-    connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy]() {
+    connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy, genAtStart]() {
+        // Discard stale results from an AI run started before the latest
+        // generateMaze() call (which calls stopAiWorker() first).
+        if (genAtStart != generationId_) {
+            thread->deleteLater();
+            aiWorker_ = nullptr;
+            aiWorkerThread_ = nullptr;
+            return;
+        }
         // Async cleanup — never block the main thread with wait().
         aiWorker_ = nullptr;
         aiWorkerThread_ = nullptr;
@@ -878,7 +918,7 @@ void MainWindow::runAiPlayer() {
                     .arg(lastAiResult_.triggeredTraps),
                 8000);
         }
-        worker->deleteLater();
+        generateButton_->setEnabled(true);  // re-enable after AI completes
         thread->deleteLater();
     });
 
@@ -953,6 +993,9 @@ void MainWindow::runOptimizer() {
         return;
     }
 
+    generateButton_->setEnabled(false);  // prevent re-entry while GA is running
+    const int genAtStart = generationId_;  // capture for staleness detection
+
     OptimizerConfig cfg;
     cfg.rows = (rowsSpin_->value() - 1) / 2;
     cfg.columns = (columnsSpin_->value() - 1) / 2;
@@ -996,11 +1039,20 @@ void MainWindow::runOptimizer() {
 
 
     connect(optimizer, &MazeOptimizer::finished, this,
-            [this, thread, optimizer, cfg](const MazeModel &bestMaze) {
+            [this, thread, optimizer, cfg, genAtStart](const MazeModel &bestMaze) {
+                // Discard stale results from a GA that was running before the
+                // latest generateMaze() call (which calls stopOptimizer() first).
+                if (genAtStart != generationId_) {
+                    thread->deleteLater();
+                    optimizer_ = nullptr;
+                    optimizerThread_ = nullptr;
+                    return;
+                }
                 optimizedMaze_ = bestMaze;
                 hasOptimizedMaze_ = true;
                 lastOptConfig_ = cfg;
                 optSaveButton_->setEnabled(true);
+                generationTimer_->stop();  // stop animation on previous maze
                 maze_ = optimizedMaze_;
                 mazeWidget_->setMaze(maze_);
                 mazeWidget_->clearAiPath();
@@ -1064,7 +1116,7 @@ void MainWindow::runOptimizer() {
                 }
 
                 // Async cleanup — never block the main thread.
-                optimizer->deleteLater();
+                generateButton_->setEnabled(true);  // re-enable after GA completes
                 thread->deleteLater();
                 optimizer_ = nullptr;
                 optimizerThread_ = nullptr;
@@ -1072,6 +1124,7 @@ void MainWindow::runOptimizer() {
 
     connect(thread, &QThread::started, optimizer, [optimizer]() {
         optimizer->run();
+        optimizer->deleteLater();  // schedule deletion while event loop is running
         QThread::currentThread()->quit();
     });
 

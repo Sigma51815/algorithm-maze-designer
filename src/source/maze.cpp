@@ -447,6 +447,8 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
         }
     }
     coinCount = std::min(coinCount, static_cast<int>(coinCandidates.size()));
+    // Shuffle so coins don't deterministically favor branch cells over main-path cells.
+    std::shuffle(coinCandidates.begin(), coinCandidates.end(), std::mt19937{static_cast<unsigned>(seed + 3)});
     for (int i = 0; i < coinCount; ++i) {
         resources_[coinCandidates[i]] = 50;
     }

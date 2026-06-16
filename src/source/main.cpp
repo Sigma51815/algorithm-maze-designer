@@ -842,6 +842,7 @@ int main(int argc, char *argv[]) {
         }
         cfg.useMixedAlgorithms = true;
         cfg.useAdversarialPlacement = true;
+        cfg.useSmartPlacement = false;
         cfg.useEnhancedFitness = true;
         cfg.topoWeight = 0.3;
         cfg.seed = 42;
