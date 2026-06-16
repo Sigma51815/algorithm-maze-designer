@@ -104,30 +104,11 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 
     result.topoDifficulty = computeTopoDifficulty(maze);
 
-    if (config.useAdversarialPlacement) {
-        // Composite difficulty score (0–100 scale).
-        // Coin miss rate × 50  – how well the maze hides coins from the AI.
-        // Trap hit rate  × 30  – how well the maze misleads the AI into traps.
-        // Path inefficiency × 20 – how much extra walking the topology forces.
-        // Topology bonus    +    – structural difficulty (dead ends, junctions, etc.).
-        result.finalFitness = result.coinMissRate * 50.0
-                              + result.trapHitRate * 30.0
-                              + result.pathInefficiency * 20.0
-                              + config.topoWeight * result.topoDifficulty * 50.0;
-    } else {
-        // Non-adversarial: keep the regret-based formula as before.
-        double bestPossibleAIScore = 0.0;
-        {
-            ResourcePlan dp = maze.optimalResourceWalk();
-            int shortestPath = static_cast<int>(dp.walk.size()) - 1;
-            if (shortestPath > 0) {
-                bestPossibleAIScore = static_cast<double>(dp.maxValue) / shortestPath;
-            }
-        }
-        double aiScoreGap = bestPossibleAIScore - result.worstAIScore;
-        result.finalFitness = aiScoreGap * 100.0
-                              * (1.0 + config.topoWeight * result.topoDifficulty);
-    }
+    // Composite difficulty score (0–100 scale) — same formula for all modes.
+    result.finalFitness = result.coinMissRate * 50.0
+                          + result.trapHitRate * 30.0
+                          + result.pathInefficiency * 20.0
+                          + config.topoWeight * result.topoDifficulty * 50.0;
 
     return result;
 }
