@@ -210,6 +210,7 @@ void MainWindow::buildUi() {
     optSaveButton_->setObjectName(QStringLiteral("secondaryButton"));
     optSaveButton_->setEnabled(false);
     generationOuter->addWidget(optSaveButton_);
+    connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
 
     panelLayout->addWidget(generationGroup);
 
@@ -295,11 +296,13 @@ void MainWindow::buildUi() {
     bossHealthEdit_->setObjectName(QStringLiteral("inputControl"));
     bossHealthEdit_->setPlaceholderText(QStringLiteral("如 35,45,60"));
     bossHealthEdit_->setToolTip(QStringLiteral("各 BOSS 血量，逗号分隔"));
+    bossHealthEdit_->setMinimumWidth(200);
     skillsEdit_ = new QLineEdit(
         QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
     skillsEdit_->setObjectName(QStringLiteral("inputControl"));
     skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却;..."));
     skillsEdit_->setToolTip(QStringLiteral("如 普通攻击:5:0;重击:10:2"));
+    skillsEdit_->setMinimumWidth(200);
     bossForm->addRow(QStringLiteral("血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能"), skillsEdit_);
     bossLayout->addLayout(bossForm);
