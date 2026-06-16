@@ -77,6 +77,7 @@ private:
     QThread *aiWorkerThread_ = nullptr;
     QObject *aiWorker_ = nullptr;
     QThread *optimizerThread_ = nullptr;
+    MazeOptimizer *optimizer_ = nullptr;
     QLabel *aiStatusLabel_ = nullptr;
     QLabel *aiResultLabel_ = nullptr;
 
@@ -92,6 +93,8 @@ private:
     void applyOptimizedMaze();
     void saveOptimizedMaze();
     void updateValidation();
+    void stopAiWorker();
+    void stopOptimizer();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;
     [[nodiscard]] QVector<BossSkill> parseSkills(bool *ok = nullptr) const;
 };

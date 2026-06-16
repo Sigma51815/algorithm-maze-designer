@@ -40,22 +40,31 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     generateMaze();
 }
 
+void MainWindow::stopAiWorker() {
+    if (!aiWorkerThread_) return;
+    disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
+    aiWorkerThread_->quit();
+    aiWorkerThread_->wait();
+    delete aiWorker_;
+    aiWorker_ = nullptr;
+    delete aiWorkerThread_;
+    aiWorkerThread_ = nullptr;
+}
+
+void MainWindow::stopOptimizer() {
+    if (!optimizerThread_) return;
+    disconnect(optimizerThread_, nullptr, nullptr, nullptr);
+    optimizerThread_->quit();
+    optimizerThread_->wait();
+    delete optimizer_;
+    optimizer_ = nullptr;
+    delete optimizerThread_;
+    optimizerThread_ = nullptr;
+}
+
 MainWindow::~MainWindow() {
-    if (aiWorkerThread_) {
-        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
-        aiWorkerThread_->quit();
-        aiWorkerThread_->wait();
-        if (aiWorker_) {
-            delete aiWorker_;
-            aiWorker_ = nullptr;
-        }
-        delete aiWorkerThread_;
-        aiWorkerThread_ = nullptr;
-    }
-    if (optimizerThread_) {
-        optimizerThread_->quit();
-        optimizerThread_->wait();
-    }
+    stopAiWorker();
+    stopOptimizer();
 }
 
 void MainWindow::buildUi() {
@@ -768,8 +777,12 @@ void MainWindow::runAiPlayer() {
         QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
     });
 
-    connect(thread, &QThread::finished, this, [this, worker, resultCopy]() {
-        worker->deleteLater();
+    connect(thread, &QThread::finished, this, [this, thread, worker, resultCopy]() {
+        disconnect(thread, &QThread::finished, nullptr, nullptr);
+        thread->quit();
+        thread->wait();
+        delete worker;
+        delete thread;
         aiWorker_ = nullptr;
         aiWorkerThread_ = nullptr;
         lastAiResult_ = *resultCopy;
@@ -806,8 +819,6 @@ void MainWindow::runAiPlayer() {
                 .arg(lastAiResult_.triggeredTraps),
             8000);
     });
-
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
     aiWorker_ = worker;
     aiWorkerThread_ = thread;
@@ -905,6 +916,7 @@ void MainWindow::runOptimizer() {
 
     auto *optimizer = new MazeOptimizer;
     optimizer->setConfig(cfg);
+    optimizer_ = optimizer;
 
     auto *thread = new QThread;
     thread->setStackSize(8 * 1024 * 1024);
@@ -980,6 +992,7 @@ void MainWindow::runOptimizer() {
                 thread->wait();
                 delete optimizer;
                 delete thread;
+                optimizer_ = nullptr;
                 optimizerThread_ = nullptr;
             });
 
@@ -995,21 +1008,10 @@ void MainWindow::applyOptimizedMaze() {
     if (!hasOptimizedMaze_) {
         return;
     }
-    // Stop all running timers and AI worker.
     generationTimer_->stop();
     pathTimer_->stop();
     aiPathTimer_->stop();
-    if (aiWorkerThread_) {
-        disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
-        aiWorkerThread_->quit();
-        aiWorkerThread_->wait();
-        if (aiWorker_) {
-            delete aiWorker_;
-            aiWorker_ = nullptr;
-        }
-        delete aiWorkerThread_;
-        aiWorkerThread_ = nullptr;
-    }
+    stopAiWorker();
 
     maze_ = optimizedMaze_;
     lastPlan_ = {};
