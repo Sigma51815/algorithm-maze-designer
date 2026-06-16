@@ -8,9 +8,19 @@
 *.so
 *.dylib
 *.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
 
 # CMake
 CMakeLists.txt.user
+CMakeUserPresets.json
 compile_commands.json
 
 # Qt

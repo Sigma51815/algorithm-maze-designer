@@ -17,26 +17,47 @@
 - 智能资源分布（金币放死胡同、陷阱放分叉口）
 - 增强适应度评估（regret × 拓扑难度因子）
 
-**技术栈**：C++17 / Qt 6 Widgets / CMake + Unix Makefiles / macOS（M4）
+**技术栈**：C++17 / Qt 6 Widgets / CMake / 跨平台（macOS / Windows / Linux）
 
 ## 分支
 
-- `main` — 稳定版本
+- `main` — 稳定版本（组长 Windows 端）
 - `tmchao7-maze-dev` — 当前开发分支（最新）
 
 ## 构建与运行
 
+### macOS / Linux
+
 ```bash
-# macOS
 make            # configure + build
 make test       # build + run --self-test（28 个测试）
 make run        # build + launch GUI
+```
 
-# 命令行运行
-./build/maze_designer --self-test           # 无头自测
+### Windows（原生）
+
+```cmd
+build.bat               # configure + build（Release）
+build.bat debug         # Debug 构建
+build.bat test          # build + run --self-test
+build.bat run           # build + launch GUI
+build.bat clean         # 删除 build 目录
+```
+
+前提：CMake 3.16+、Qt 6.x、Visual Studio 2019+（MSVC）
+
+### 命令行运行（所有平台）
+
+```bash
+# macOS / Linux
+./build/maze_designer --self-test
+# Windows
+.\build\Release\maze_designer.exe --self-test
+
+# 参数说明
 ./build/maze_designer --gui-smoke-test      # GUI 烟雾测试
 ./build/maze_designer --run-optimizer       # 无头优化器（服务器用）
-./build/maze_designer --run-optimizer --rows 7 --cols 7 --enable-rl 1 --rl-episodes 10000
+./build/maze_designer --run-optimizer --rows 7 --cols 7
 ```
 
 ## 源码结构
