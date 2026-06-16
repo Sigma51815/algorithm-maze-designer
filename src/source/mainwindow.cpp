@@ -257,14 +257,17 @@ void MainWindow::buildUi() {
     auto *resourceForm = new QFormLayout;
     resourceForm->setSpacing(6);
     resourceForm->setLabelAlignment(Qt::AlignRight);
-    // Resource counts are now auto-derived from maze dimensions;
-    // displayed as info labels instead of user-editable spinboxes.
-    coinInfoLabel_ = new QLabel(QStringLiteral("—"));
-    coinInfoLabel_->setObjectName(QStringLiteral("infoCard"));
-    trapInfoLabel_ = new QLabel(QStringLiteral("—"));
-    trapInfoLabel_->setObjectName(QStringLiteral("infoCard"));
-    resourceForm->addRow(QStringLiteral("金币"), coinInfoLabel_);
-    resourceForm->addRow(QStringLiteral("陷阱"), trapInfoLabel_);
+    // Resource counts default to auto-derived values (editable, with reset).
+    coinSpin_ = new QSpinBox;
+    coinSpin_->setObjectName(QStringLiteral("inputControl"));
+    coinSpin_->setRange(0, 300);
+    coinSpin_->setValue(8);
+    trapSpin_ = new QSpinBox;
+    trapSpin_->setObjectName(QStringLiteral("inputControl"));
+    trapSpin_->setRange(0, 300);
+    trapSpin_->setValue(6);
+    resourceForm->addRow(QStringLiteral("金币"), coinSpin_);
+    resourceForm->addRow(QStringLiteral("陷阱"), trapSpin_);
     resourceLayout->addLayout(resourceForm);
     auto *resourceButtons = new QHBoxLayout;
     resourceButtons->setSpacing(8);
@@ -275,6 +278,16 @@ void MainWindow::buildUi() {
     resourceButtons->addWidget(placeButton);
     resourceButtons->addWidget(solveResourceButton);
     resourceLayout->addLayout(resourceButtons);
+    resetCoinLabel_ = new QLabel(QStringLiteral("<a href='#' style='color:#8B6F5E'>重置为自适应数量</a>"));
+    resetCoinLabel_->setObjectName(QStringLiteral("infoCard"));
+    resetCoinLabel_->setTextFormat(Qt::RichText);
+    resetCoinLabel_->setCursor(Qt::PointingHandCursor);
+    connect(resetCoinLabel_, &QLabel::linkActivated, this, [this]() {
+        int cells = maze_.cellCount();
+        coinSpin_->setValue(autoCoinCount(cells));
+        trapSpin_->setValue(autoTrapCount(cells));
+    });
+    resourceLayout->addWidget(resetCoinLabel_);
     resourceResultLabel_ = new QLabel(QStringLiteral("尚未求解"));
     resourceResultLabel_->setObjectName(QStringLiteral("resultLabel"));
     resourceResultLabel_->setWordWrap(true);
@@ -523,10 +536,10 @@ void MainWindow::generateMaze() {
     maze_.generate((matrixRows - 1) / 2, (matrixColumns - 1) / 2, algorithm,
                    static_cast<quint32>(seedSpin_->value()));
     const int cells = maze_.cellCount();
-    maze_.placeResources(autoCoinCount(cells), autoTrapCount(cells),
+    coinSpin_->setValue(autoCoinCount(cells));
+    trapSpin_->setValue(autoTrapCount(cells));
+    maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
                          static_cast<quint32>(seedSpin_->value() + 1));
-    if (coinInfoLabel_) coinInfoLabel_->setText(QStringLiteral("~%1").arg(autoCoinCount(cells)));
-    if (trapInfoLabel_) trapInfoLabel_->setText(QStringLiteral("~%1").arg(autoTrapCount(cells)));
     lastPlan_ = {};
     lastBossResult_ = {};
     resourceResultLabel_->setText(QStringLiteral("尚未求解"));
@@ -544,10 +557,10 @@ void MainWindow::placeResources() {
     }
     pathTimer_->stop();
     const int cells = maze_.cellCount();
-    maze_.placeResources(autoCoinCount(cells), autoTrapCount(cells),
+    coinSpin_->setValue(autoCoinCount(cells));
+    trapSpin_->setValue(autoTrapCount(cells));
+    maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
                          static_cast<quint32>(seedSpin_->value() + 1));
-    if (coinInfoLabel_) coinInfoLabel_->setText(QStringLiteral("~%1").arg(autoCoinCount(cells)));
-    if (trapInfoLabel_) trapInfoLabel_->setText(QStringLiteral("~%1").arg(autoTrapCount(cells)));
     lastPlan_ = {};
     resourceResultLabel_->setText(QStringLiteral("资源已重新布置，等待 DP 求解"));
     mazeWidget_->setMaze(maze_);
@@ -950,9 +963,8 @@ void MainWindow::runOptimizer() {
     cfg.populationSize = optPopSpin_->value();
     cfg.generations = optGenSpin_->value();
     cfg.mutationRate = optMutSpin_->value() / 100.0;
-    const int cells = cfg.rows * cfg.columns;
-    cfg.coinCount = autoCoinCount(cells);
-    cfg.trapCount = autoTrapCount(cells);
+    cfg.coinCount = coinSpin_->value();
+    cfg.trapCount = trapSpin_->value();
     cfg.seed = static_cast<quint32>(seedSpin_->value());
     cfg.useMixedAlgorithms = false;
     cfg.baseAlgorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
