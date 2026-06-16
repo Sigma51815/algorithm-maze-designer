@@ -729,8 +729,21 @@ int runSelfTests() {
         int smartGreedy = MazeEvaluator::evaluateGreedyWorst(smartBest);
         int smartRegret = smartDp.maxValue - smartGreedy;
 
+        OptimizerConfig advCfg = baseCfg;
+        advCfg.useSmartPlacement = false;
+        advCfg.useAdversarialPlacement = true;
+        advCfg.useEnhancedFitness = true;
+        advCfg.topoWeight = 0.3;
+        MazeOptimizer advOpt;
+        advOpt.setConfig(advCfg);
+        MazeModel advBest = advOpt.run();
+        ResourcePlan advDp = advBest.optimalResourceWalk();
+        int advGreedy = MazeEvaluator::evaluateGreedyWorst(advBest);
+        int advRegret = advDp.maxValue - advGreedy;
+
         PlayResult randomPlay = GreedyPlayer::play(randomBest);
         PlayResult smartPlay = GreedyPlayer::play(smartBest);
+        PlayResult advPlay = GreedyPlayer::play(advBest);
 
         output << "PASS GA comparison:\n"
                << "  random: dp=" << randomDp.maxValue << " greedy=" << randomGreedy
@@ -740,7 +753,11 @@ int runSelfTests() {
                << "  smart:  dp=" << smartDp.maxValue << " greedy=" << smartGreedy
                << " regret=" << smartRegret
                << " ai_score=" << smartPlay.score
-               << " ai_steps=" << smartPlay.totalSteps << '\n';
+               << " ai_steps=" << smartPlay.totalSteps << '\n'
+               << "  adversarial: dp=" << advDp.maxValue << " greedy=" << advGreedy
+               << " regret=" << advRegret
+               << " ai_score=" << advPlay.score
+               << " ai_steps=" << advPlay.totalSteps << '\n';
     }
 
     {

@@ -30,6 +30,7 @@ struct OptimizerConfig {
     // When false, only baseAlgorithm is used (legacy behaviour).
     bool useMixedAlgorithms = true;
     bool useSmartPlacement = true;
+    bool useAdversarialPlacement = false;
     bool useEnhancedFitness = true;
     double topoWeight = 0.3;
 };

@@ -8,7 +8,9 @@
 EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &config) {
     EvalResult result;
 
-    if (config.useSmartPlacement) {
+    if (config.useAdversarialPlacement) {
+        ResourcePlacer::placeAdversarial(maze, config.placerConfig);
+    } else if (config.useSmartPlacement) {
         ResourcePlacer::placeSmart(maze, config.placerConfig);
     }
 
@@ -50,7 +52,14 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 
     result.topoDifficulty = computeTopoDifficulty(maze);
 
-    result.finalFitness = result.regretCombined * (1.0 + config.topoWeight * result.topoDifficulty);
+    if (config.useAdversarialPlacement) {
+        // 对抗模式：直接最小化 AI 分数
+        // fitness = -(AI worst score) + 拓扑难度加成
+        // AI 分数越低（越负），fitness 越高
+        result.finalFitness = -worstAI + config.topoWeight * result.topoDifficulty * 50;
+    } else {
+        result.finalFitness = result.regretCombined * (1.0 + config.topoWeight * result.topoDifficulty);
+    }
 
     return result;
 }

@@ -19,6 +19,7 @@ struct EvalResult {
 
 struct EvaluatorConfig {
     bool useSmartPlacement = true;
+    bool useAdversarialPlacement = false;
     ResourcePlacerConfig placerConfig;
     bool evaluateAgainstRL = false;
     RLConfig rlConfig;

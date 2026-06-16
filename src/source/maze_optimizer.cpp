@@ -155,7 +155,8 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
 double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
     if (config_.useEnhancedFitness) {
         EvaluatorConfig ec;
-        ec.useSmartPlacement = true;
+        ec.useAdversarialPlacement = config_.useAdversarialPlacement;
+        ec.useSmartPlacement = !config_.useAdversarialPlacement && config_.useSmartPlacement;
         ec.placerConfig.coinCount = config_.coinCount;
         ec.placerConfig.trapCount = config_.trapCount;
         ec.placerConfig.seed = rng_();

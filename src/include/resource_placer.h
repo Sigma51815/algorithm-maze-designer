@@ -16,5 +16,6 @@ struct ResourcePlacerConfig {
 class ResourcePlacer {
 public:
     static void placeSmart(MazeModel &maze, const ResourcePlacerConfig &config);
+    static void placeAdversarial(MazeModel &maze, const ResourcePlacerConfig &config);
     static void placeRandom(MazeModel &maze, int coinCount, int trapCount, quint32 seed);
 };
