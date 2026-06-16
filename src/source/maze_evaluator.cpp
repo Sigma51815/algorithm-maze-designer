@@ -8,14 +8,43 @@
 EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &config) {
     EvalResult result;
 
-    if (config.useAdversarialPlacement) {
-        ResourcePlacer::placeAdversarial(maze, config.placerConfig);
-    } else if (config.useSmartPlacement) {
-        ResourcePlacer::placeSmart(maze, config.placerConfig);
+    if (!config.skipPlacement) {
+        if (config.useAdversarialPlacement) {
+            ResourcePlacer::placeAdversarial(maze, config.placerConfig);
+        } else if (config.useSmartPlacement) {
+            ResourcePlacer::placeSmart(maze, config.placerConfig);
+        }
     }
 
     ResourcePlan dp = maze.optimalResourceWalk();
     result.dpScore = dp.maxValue;
+
+    // Count total coins / traps in the maze.
+    int totalCoins = 0, totalTraps = 0;
+    for (int cell = 0; cell < maze.cellCount(); ++cell) {
+        int val = maze.resourceAt(cell);
+        if (val > 0) ++totalCoins;
+        else if (val < 0) ++totalTraps;
+    }
+
+    // Shortest path length (BFS, used for pathInefficiency).
+    int shortestPathLen = 0;
+    {
+        QVector<int> dist(maze.cellCount(), -1);
+        QQueue<int> queue;
+        dist[maze.startCell()] = 0;
+        queue.enqueue(maze.startCell());
+        while (!queue.isEmpty()) {
+            int cur = queue.dequeue();
+            for (int next : maze.neighbors(cur)) {
+                if (dist[next] < 0) {
+                    dist[next] = dist[cur] + 1;
+                    queue.enqueue(next);
+                }
+            }
+        }
+        shortestPathLen = dist[maze.endCell()] > 0 ? dist[maze.endCell()] : 1;
+    }
 
     {
         const QVector<GreedyStrategy> strategies = {
@@ -26,13 +55,36 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         };
         int worst = std::numeric_limits<int>::max();
         int best = std::numeric_limits<int>::min();
+        double worstAIScore = 0.0;
+        double worstMissRate = 0.0;
+        double worstHitRate = 0.0;
+        double worstInefficiency = 0.0;
         for (GreedyStrategy s : strategies) {
             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
-            worst = std::min(worst, r.remainingResource);
+            if (r.remainingResource < worst) {
+                worst = r.remainingResource;
+                worstAIScore = r.totalSteps > 0
+                    ? static_cast<double>(r.remainingResource) / r.totalSteps
+                    : 0.0;
+            }
             best = std::max(best, r.remainingResource);
+
+            double miss = totalCoins > 0
+                ? static_cast<double>(totalCoins - r.collectedCoins) / totalCoins : 0.0;
+            double hit  = totalTraps > 0
+                ? static_cast<double>(r.triggeredTraps) / totalTraps : 0.0;
+            double ineff = r.totalSteps > shortestPathLen
+                ? static_cast<double>(r.totalSteps - shortestPathLen) / shortestPathLen : 0.0;
+            if (miss > worstMissRate) worstMissRate = miss;
+            if (hit  > worstHitRate)  worstHitRate  = hit;
+            if (ineff > worstInefficiency) worstInefficiency = ineff;
         }
         result.worstGreedyScore = worst;
         result.bestGreedyScore = best;
+        result.worstAIScore = worstAIScore;
+        result.coinMissRate = worstMissRate;
+        result.trapHitRate = worstHitRate;
+        result.pathInefficiency = worstInefficiency;
     }
     result.regretGreedy = result.dpScore - result.worstGreedyScore;
 
@@ -53,12 +105,28 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
     result.topoDifficulty = computeTopoDifficulty(maze);
 
     if (config.useAdversarialPlacement) {
-        // 对抗模式：直接最小化 AI 分数
-        // fitness = -(AI worst score) + 拓扑难度加成
-        // AI 分数越低（越负），fitness 越高
-        result.finalFitness = -worstAI + config.topoWeight * result.topoDifficulty * 50;
+        // Composite difficulty score (0–100 scale).
+        // Coin miss rate × 50  – how well the maze hides coins from the AI.
+        // Trap hit rate  × 30  – how well the maze misleads the AI into traps.
+        // Path inefficiency × 20 – how much extra walking the topology forces.
+        // Topology bonus    +    – structural difficulty (dead ends, junctions, etc.).
+        result.finalFitness = result.coinMissRate * 50.0
+                              + result.trapHitRate * 30.0
+                              + result.pathInefficiency * 20.0
+                              + config.topoWeight * result.topoDifficulty * 50.0;
     } else {
-        result.finalFitness = result.regretCombined * (1.0 + config.topoWeight * result.topoDifficulty);
+        // Non-adversarial: keep the regret-based formula as before.
+        double bestPossibleAIScore = 0.0;
+        {
+            ResourcePlan dp = maze.optimalResourceWalk();
+            int shortestPath = static_cast<int>(dp.walk.size()) - 1;
+            if (shortestPath > 0) {
+                bestPossibleAIScore = static_cast<double>(dp.maxValue) / shortestPath;
+            }
+        }
+        double aiScoreGap = bestPossibleAIScore - result.worstAIScore;
+        result.finalFitness = aiScoreGap * 100.0
+                              * (1.0 + config.topoWeight * result.topoDifficulty);
     }
 
     return result;

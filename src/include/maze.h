@@ -7,6 +7,7 @@
 #include <QString>
 #include <QVector>
 
+#include <algorithm>
 #include <array>
 #include <random>
 
@@ -44,6 +45,15 @@ struct CellTopology {
     bool isJunction = false;
     int corridorLength = 0;
 };
+
+// Adaptive coin / trap counts derived from maze cell count.
+// Density: ~12 % coins, ~8 % traps, with lower/upper bounds.
+inline int autoCoinCount(int cellCount) {
+    return std::clamp(static_cast<int>(cellCount * 0.12), 3, 50);
+}
+inline int autoTrapCount(int cellCount) {
+    return std::clamp(static_cast<int>(cellCount * 0.08), 2, 35);
+}
 
 class MazeModel {
 public:
