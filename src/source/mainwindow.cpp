@@ -260,14 +260,19 @@ void MainWindow::buildUi() {
     // Resource counts default to auto-derived values (editable, with reset).
     coinSpin_ = new QSpinBox;
     coinSpin_->setObjectName(QStringLiteral("inputControl"));
-    coinSpin_->setRange(0, 300);
-    coinSpin_->setValue(8);
+    coinSpin_->setRange(0, 300); coinSpin_->setValue(8);
     trapSpin_ = new QSpinBox;
     trapSpin_->setObjectName(QStringLiteral("inputControl"));
-    trapSpin_->setRange(0, 300);
-    trapSpin_->setValue(6);
-    resourceForm->addRow(QStringLiteral("金币"), coinSpin_);
-    resourceForm->addRow(QStringLiteral("陷阱"), trapSpin_);
+    trapSpin_->setRange(0, 300); trapSpin_->setValue(6);
+    {
+        auto *coinTrapRow = new QHBoxLayout;
+        coinTrapRow->setSpacing(6);
+        coinTrapRow->addWidget(new QLabel(QStringLiteral("金币")));
+        coinTrapRow->addWidget(coinSpin_);
+        coinTrapRow->addWidget(new QLabel(QStringLiteral("陷阱")));
+        coinTrapRow->addWidget(trapSpin_);
+        resourceForm->addRow(coinTrapRow);
+    }
     resourceLayout->addLayout(resourceForm);
     auto *resourceButtons = new QHBoxLayout;
     resourceButtons->setSpacing(8);
@@ -278,16 +283,7 @@ void MainWindow::buildUi() {
     resourceButtons->addWidget(placeButton);
     resourceButtons->addWidget(solveResourceButton);
     resourceLayout->addLayout(resourceButtons);
-    resetCoinLabel_ = new QLabel(QStringLiteral("<a href='#' style='color:#8B6F5E'>重置为自适应数量</a>"));
-    resetCoinLabel_->setObjectName(QStringLiteral("infoCard"));
-    resetCoinLabel_->setTextFormat(Qt::RichText);
-    resetCoinLabel_->setCursor(Qt::PointingHandCursor);
-    connect(resetCoinLabel_, &QLabel::linkActivated, this, [this]() {
-        int cells = maze_.cellCount();
-        coinSpin_->setValue(autoCoinCount(cells));
-        trapSpin_->setValue(autoTrapCount(cells));
-    });
-    resourceLayout->addWidget(resetCoinLabel_);
+    // "重新布置" already re-places with current spin values; no separate reset needed.
     resourceResultLabel_ = new QLabel(QStringLiteral("尚未求解"));
     resourceResultLabel_->setObjectName(QStringLiteral("resultLabel"));
     resourceResultLabel_->setWordWrap(true);

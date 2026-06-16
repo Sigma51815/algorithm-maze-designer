@@ -42,7 +42,6 @@ private:
     QLabel *resourceResultLabel_ = nullptr;
     QSpinBox *coinSpin_ = nullptr;
     QSpinBox *trapSpin_ = nullptr;
-    QLabel *resetCoinLabel_ = nullptr;
     QLineEdit *bossHealthEdit_ = nullptr;
     QLineEdit *skillsEdit_ = nullptr;
     QPlainTextEdit *bossOutput_ = nullptr;
