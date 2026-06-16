@@ -59,11 +59,9 @@ private:
     QLabel *optAlgoLabel_ = nullptr;
     QLabel *optProgressLabel_ = nullptr;
     QLabel *optResultLabel_ = nullptr;
-    QPushButton *optApplyButton_ = nullptr;
     QPushButton *optSaveButton_ = nullptr;
     QCheckBox *optAdversarialCheck_ = nullptr;
     QLabel *optTopoLabel_ = nullptr;
-    QPushButton *optCompareButton_ = nullptr;
     QLabel *optCompareLabel_ = nullptr;
     MazeModel preOptMaze_;        // snapshot before GA starts
     MazeModel optimizedMaze_;
