@@ -1,5 +1,7 @@
 #include "maze.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QQueue>
 #include <QSet>
 
@@ -44,17 +46,26 @@ private:
     QVector<int> rank_;
 };
 
+quint64 edgeKey(int first, int second) {
+    if (first > second) {
+        std::swap(first, second);
+    }
+    return (static_cast<quint64>(static_cast<quint32>(first)) << 32)
+        | static_cast<quint32>(second);
+}
+
 } // namespace
 
 void MazeModel::reset(int rows, int columns, quint32 seed) {
     rows_ = std::max(2, rows);
     columns_ = std::max(2, columns);
+    bossCell_ = -1;
+    hasBoss_ = false;
     passages_.fill({false, false, false, false}, cellCount());
     resources_.fill(0, cellCount());
     generationSteps_.clear();
     startCell_ = 0;
     endCell_ = cellCount() - 1;
-    bossCell_ = endCell_;
     random_.seed(seed);
 }
 
@@ -75,6 +86,7 @@ void MazeModel::generate(int rows, int columns, MazeAlgorithm algorithm, quint32
         break;
     }
     chooseDiameterEndpoints();
+    hasBoss_ = true;
 }
 
 void MazeModel::chooseDiameterEndpoints() {
@@ -417,7 +429,9 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     }
     remaining += branchCells;
     std::shuffle(remaining.begin(), remaining.end(), engine);
-    for (int i = 0; i < trapCount - mainPathTrapCount; ++i) {
+    const int remainingTraps = std::min(trapCount - mainPathTrapCount,
+                                         static_cast<int>(remaining.size()));
+    for (int i = 0; i < remainingTraps; ++i) {
         resources_[remaining.takeLast()] = -30;
     }
 
@@ -432,6 +446,9 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
             coinCandidates.append(cell);
         }
     }
+    coinCount = std::min(coinCount, static_cast<int>(coinCandidates.size()));
+    // Shuffle so coins don't deterministically favor branch cells over main-path cells.
+    std::shuffle(coinCandidates.begin(), coinCandidates.end(), std::mt19937{static_cast<unsigned>(seed + 3)});
     for (int i = 0; i < coinCount; ++i) {
         resources_[coinCandidates[i]] = 50;
     }
@@ -529,6 +546,131 @@ MazeStatistics MazeModel::statistics() const {
             }
             result.longestCorridor = std::max(result.longestCorridor, length);
         }
+    }
+    return result;
+}
+
+QVector<CellTopology> MazeModel::analyzeTopology() const {
+    QVector<CellTopology> result(cellCount());
+    if (cellCount() == 0) return result;
+
+    QVector<int> parent = bfsParent();
+
+    QVector<int> depth(cellCount(), -1);
+    QQueue<int> queue;
+    depth[startCell()] = 0;
+    queue.enqueue(startCell());
+    while (!queue.isEmpty()) {
+        int cur = queue.dequeue();
+        for (int next : neighbors(cur)) {
+            if (depth[next] < 0) {
+                depth[next] = depth[cur] + 1;
+                queue.enqueue(next);
+            }
+        }
+    }
+
+    QVector<bool> onMainPath(cellCount(), false);
+    if (parent[endCell()] < 0) return result;
+    for (int cell = endCell();; cell = parent[cell]) {
+        onMainPath[cell] = true;
+        if (cell == startCell()) break;
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        result[cell].cell = cell;
+        result[cell].depth = depth[cell];
+        result[cell].onMainPath = onMainPath[cell];
+        int degree = neighbors(cell).size();
+        result[cell].isDeadEnd = (degree == 1 && cell != startCell() && cell != endCell());
+        result[cell].isJunction = (degree >= 3);
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (!result[cell].isDeadEnd) continue;
+        int d = 0;
+        int cur = cell;
+        int prev = -1;
+        while (cur >= 0) {
+            int degree = neighbors(cur).size();
+            if (degree >= 3 || cur == startCell() || cur == endCell()) break;
+            ++d;
+            int next = -1;
+            for (int n : neighbors(cur)) {
+                if (n != prev) { next = n; break; }
+            }
+            prev = cur;
+            cur = next;
+        }
+        cur = cell;
+        prev = -1;
+        int remaining = d;
+        while (remaining > 0 && cur >= 0) {
+            result[cur].branchDepth = remaining;
+            result[cur].corridorLength = d;
+            int next = -1;
+            for (int n : neighbors(cur)) {
+                if (n != prev) { next = n; break; }
+            }
+            prev = cur;
+            cur = next;
+            --remaining;
+        }
+    }
+
+    return result;
+}
+
+QVector<int> MazeModel::deadEndCells() const {
+    QVector<int> result;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (cell == startCell() || cell == endCell()) continue;
+        if (neighbors(cell).size() == 1) result.append(cell);
+    }
+    return result;
+}
+
+QVector<int> MazeModel::bfsParent() const {
+    QVector<int> parent(cellCount(), -1);
+    if (cellCount() == 0) return parent;
+    QQueue<int> queue;
+    parent[startCell()] = startCell();
+    queue.enqueue(startCell());
+    while (!queue.isEmpty() && parent[endCell()] < 0) {
+        int cur = queue.dequeue();
+        for (int next : neighbors(cur)) {
+            if (parent[next] < 0) {
+                parent[next] = cur;
+                queue.enqueue(next);
+            }
+        }
+    }
+    return parent;
+}
+
+QVector<int> MazeModel::branchCells() const {
+    QVector<int> parent = bfsParent();
+    QVector<bool> onMain(cellCount(), false);
+    if (parent[endCell()] < 0) return {};
+    for (int cell = endCell();; cell = parent[cell]) {
+        onMain[cell] = true;
+        if (cell == startCell()) break;
+    }
+    QVector<int> result;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (cell != startCell() && cell != endCell() && !onMain[cell])
+            result.append(cell);
+    }
+    return result;
+}
+
+QVector<int> MazeModel::mainPathCells() const {
+    QVector<int> parent = bfsParent();
+    if (parent[endCell()] < 0) return {};
+    QVector<int> result;
+    for (int cell = endCell();; cell = parent[cell]) {
+        result.append(cell);
+        if (cell == startCell()) break;
     }
     return result;
 }
@@ -654,4 +796,288 @@ QStringList MazeModel::expandedGrid() const {
         }
     }
     return grid;
+}
+
+void MazeModel::setBossCell(int cell) {
+    if (cell >= 0 && cell < cellCount() && cell != startCell() && cell != endCell()) {
+        bossCell_ = cell;
+        hasBoss_ = true;
+    }
+}
+
+void MazeModel::consumeResource(int cell) {
+    if (cell >= 0 && cell < cellCount()) {
+        resources_[cell] = 0;
+    }
+}
+
+QJsonObject MazeModel::toJson() const {
+    QJsonObject object;
+    object.insert(QStringLiteral("format"), QStringLiteral("algorithm-maze-v1"));
+    object.insert(QStringLiteral("rows"), rows_);
+    object.insert(QStringLiteral("columns"), columns_);
+    object.insert(QStringLiteral("startCell"), startCell());
+    object.insert(QStringLiteral("endCell"), endCell());
+    object.insert(QStringLiteral("bossAtCell"), bossCell());
+
+    QJsonArray gridArray;
+    for (const QString &line : expandedGrid()) {
+        gridArray.append(line);
+    }
+    object.insert(QStringLiteral("expandedMatrix"), gridArray);
+
+    QJsonArray edgeArray;
+    QSet<quint64> emitted;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        for (int next : neighbors(cell)) {
+            const quint64 key = edgeKey(cell, next);
+            if (emitted.contains(key)) {
+                continue;
+            }
+            emitted.insert(key);
+            QJsonArray edge;
+            edge.append(cell);
+            edge.append(next);
+            edgeArray.append(edge);
+        }
+    }
+    object.insert(QStringLiteral("passages"), edgeArray);
+
+    QJsonArray resourceArray;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (resourceAt(cell) == 0) {
+            continue;
+        }
+        QJsonObject resource;
+        resource.insert(QStringLiteral("cell"), cell);
+        resource.insert(QStringLiteral("value"), resourceAt(cell));
+        resource.insert(QStringLiteral("type"),
+                        resourceAt(cell) > 0 ? QStringLiteral("coin")
+                                             : QStringLiteral("trap"));
+        resourceArray.append(resource);
+    }
+    object.insert(QStringLiteral("resources"), resourceArray);
+    return object;
+}
+
+QStringList MazeModel::compactGrid() const {
+    const int gridRows = rows_ * 2 + 1;
+    const int gridCols = columns_ * 2 + 1;
+    QStringList grid;
+    for (int r = 0; r < gridRows; ++r) {
+        grid.append(QString(gridCols, QLatin1Char('#')));
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        const int gr = rowOf(cell) * 2 + 1;
+        const int gc = columnOf(cell) * 2 + 1;
+        QChar marker = QLatin1Char(' ');
+        if (cell == startCell()) {
+            marker = QLatin1Char('S');
+        } else if (hasBoss_ && cell == bossCell_) {
+            marker = QLatin1Char('B');
+        } else if (cell == endCell()) {
+            marker = QLatin1Char('E');
+        } else if (resourceAt(cell) > 0) {
+            marker = QLatin1Char('G');
+        } else if (resourceAt(cell) < 0) {
+            marker = QLatin1Char('T');
+        }
+        grid[gr][gc] = marker;
+
+        if (passages_[cell][Right] && columnOf(cell) + 1 < columns_) {
+            grid[gr][gc + 1] = QLatin1Char(' ');
+        }
+        if (passages_[cell][Down] && rowOf(cell) + 1 < rows_) {
+            grid[gr + 1][gc] = QLatin1Char(' ');
+        }
+    }
+    return grid;
+}
+
+QJsonObject MazeModel::toCrossTestJson(const QVector<int> &bossHealth,
+                                       const QVector<BossSkill> &skills,
+                                       int minRounds,
+                                       int coinConsumption) const {
+    QJsonObject object;
+
+    QJsonArray mazeArray;
+    for (const QString &line : compactGrid()) {
+        QJsonArray row;
+        for (int i = 0; i < line.size(); ++i) {
+            row.append(QString(line[i]));
+        }
+        mazeArray.append(row);
+    }
+    object.insert(QStringLiteral("maze"), mazeArray);
+
+    QJsonArray bossArray;
+    for (int health : bossHealth) {
+        bossArray.append(health);
+    }
+    object.insert(QStringLiteral("B"), bossArray);
+
+    QJsonArray skillsArray;
+    for (const BossSkill &skill : skills) {
+        QJsonArray pair;
+        pair.append(skill.damage);
+        pair.append(skill.cooldown);
+        skillsArray.append(pair);
+    }
+    object.insert(QStringLiteral("PlayerSkills"), skillsArray);
+
+    object.insert(QStringLiteral("minRouds"), minRounds);
+    object.insert(QStringLiteral("CoinConsumption"), coinConsumption);
+    return object;
+}
+
+QVector<MazeEdge> MazeModel::allEdges() const {
+    QSet<quint64> seen;
+    QVector<MazeEdge> edges;
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        for (int next : neighbors(cell)) {
+            int lo = std::min(cell, next);
+            int hi = std::max(cell, next);
+            quint64 key = (static_cast<quint64>(lo) << 32) | static_cast<quint32>(hi);
+            if (!seen.contains(key)) {
+                seen.insert(key);
+                edges.append({lo, hi});
+            }
+        }
+    }
+    return edges;
+}
+
+void MazeModel::setFromEdges(int rows, int columns, const QVector<MazeEdge> &edges,
+                              quint32 seed) {
+    reset(rows, columns, seed);
+    for (const MazeEdge &edge : edges) {
+        carve(edge.from, edge.to);
+    }
+    chooseDiameterEndpoints();
+    hasBoss_ = true;
+}
+
+void MazeModel::setResources(const QVector<int> &resources) {
+    resources_ = resources;
+}
+
+bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
+                                  QString *error) {
+    if (matrix.isEmpty()) {
+        if (error) *error = QStringLiteral("迷宫矩阵为空");
+        return false;
+    }
+
+    QStringList grid;
+    for (const QJsonValue &rowVal : matrix) {
+        if (rowVal.isString()) {
+            grid.append(rowVal.toString());
+        } else if (rowVal.isArray()) {
+            const QJsonArray row = rowVal.toArray();
+            QString line;
+            for (const QJsonValue &cellVal : row) line += cellVal.toString();
+            grid.append(line);
+        } else {
+            if (error) *error = QStringLiteral("无效的行格式");
+            return false;
+        }
+    }
+
+    const int gridRows = grid.size();
+    const int gridCols = grid.isEmpty() ? 0 : grid.first().size();
+    if (gridRows < 3 || gridCols < 3 || gridRows % 2 == 0 || gridCols % 2 == 0) {
+        if (error) *error = QStringLiteral("迷宫尺寸无效（需奇数×奇数且≥3）");
+        return false;
+    }
+
+    const int logicalRows = (gridRows - 1) / 2;
+    const int logicalCols = (gridCols - 1) / 2;
+    const int totalCells = logicalRows * logicalCols;
+
+    out.reset(logicalRows, logicalCols, 42);
+
+    int startCell = -1;
+    int endCell = -1;
+    int bossCell = -1;
+    QVector<int> resources(totalCells, 0);
+    QVector<MazeEdge> edges;
+
+    for (int r = 0; r < logicalRows; ++r) {
+        for (int c = 0; c < logicalCols; ++c) {
+            const int gr = r * 2 + 1;
+            const int gc = c * 2 + 1;
+            const int cell = r * logicalCols + c;
+            const QChar ch = grid[gr][gc];
+
+            if (ch == QLatin1Char('S')) startCell = cell;
+            else if (ch == QLatin1Char('E')) endCell = cell;
+            else if (ch == QLatin1Char('B')) bossCell = cell;
+            else if (ch == QLatin1Char('G')) resources[cell] = 50;
+            else if (ch == QLatin1Char('T')) resources[cell] = -30;
+
+            if (c + 1 < logicalCols) {
+                const int wallCol = gc + 1;
+                if (wallCol < gridCols && grid[gr][wallCol] != QLatin1Char('#')) {
+                    edges.append({cell, cell + 1});
+                }
+            }
+            if (r + 1 < logicalRows) {
+                const int wallRow = gr + 1;
+                if (wallRow < gridRows && grid[wallRow][gc] != QLatin1Char('#')) {
+                    edges.append({cell, cell + logicalCols});
+                }
+            }
+        }
+    }
+
+    if (startCell < 0 || endCell < 0) {
+        if (error) *error = QStringLiteral("未找到起点(S)或终点(E)");
+        return false;
+    }
+
+    out.setFromEdges(logicalRows, logicalCols, edges, 42);
+    out.setResources(resources);
+    if (bossCell >= 0) out.setBossCell(bossCell);
+    out.startCell_ = startCell;
+    out.endCell_ = endCell;
+
+    return true;
+}
+
+MazeModel MazeModel::extractSubArea(int centerCell) const {
+    MazeModel sub;
+    const int cr = rowOf(centerCell);
+    const int cc = columnOf(centerCell);
+    sub.rows_ = 3;
+    sub.columns_ = 3;
+    sub.passages_.fill({false, false, false, false}, 9);
+    sub.resources_.fill(0, 9);
+    sub.hasBoss_ = false;
+    sub.bossCell_ = -1;
+    sub.startCell_ = 4;
+    sub.endCell_ = 4;
+
+    auto subIndex = [&](int r, int c) { return (r - cr + 1) * 3 + (c - cc + 1); };
+
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            const int r = cr + dr;
+            const int c = cc + dc;
+            if (r < 0 || r >= rows_ || c < 0 || c >= columns_) continue;
+            const int origCell = index(r, c);
+            const int subCell = subIndex(r, c);
+            sub.resources_[subCell] = resources_[origCell];
+            for (int dir = 0; dir < 4; ++dir) {
+                if (!passages_[origCell][dir]) continue;
+                int nr = r, nc = c;
+                if (dir == 0) --nr; else if (dir == 1) ++nc;
+                else if (dir == 2) ++nr; else --nc;
+                if (nr >= cr - 1 && nr <= cr + 1 && nc >= cc - 1 && nc <= cc + 1) {
+                    sub.passages_[subCell][dir] = true;
+                }
+            }
+        }
+    }
+    return sub;
 }

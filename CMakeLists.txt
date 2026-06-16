@@ -1,32 +1,46 @@
-cmake_minimum_required(VERSION 3.21)
-
-project(AlgorithmMazeDesigner VERSION 1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(maze_designer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+# --- Qt6 (cross-platform: macOS / Windows / Linux) ---
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+# --- Source files ---
 add_executable(maze_designer
-    src/source/main.cpp
-    src/source/mainwindow.cpp
-    src/source/mazewidget.cpp
-    src/source/maze.cpp
-    src/source/bosssolver.cpp
-    src/source/battlewindow.cpp
-    src/source/aiplayerformat.cpp
-    src/include/mainwindow.h
-    src/include/mazewidget.h
     src/include/maze.h
     src/include/bosssolver.h
+    src/include/mainwindow.h
+    src/include/mazewidget.h
     src/include/battlewindow.h
-    src/include/aiplayerformat.h
+    src/include/maze_optimizer.h
+    src/include/maze_saver.h
+    src/include/ai/greedy_player.h
+    src/include/ai/aiplayerformat.h
+    src/include/ai/rl_player.h
+    src/include/coevolution.h
+    src/include/resource_placer.h
+    src/include/maze_evaluator.h
+    src/source/main.cpp
+    src/source/maze.cpp
+    src/source/bosssolver.cpp
+    src/source/mainwindow.cpp
+    src/source/mazewidget.cpp
+    src/source/battlewindow.cpp
+    src/source/maze_optimizer.cpp
+    src/source/maze_saver.cpp
+    src/source/ai/greedy_player.cpp
+    src/source/ai/aiplayerformat.cpp
+    src/source/ai/rl_player.cpp
+    src/source/coevolution.cpp
+    src/source/resource_placer.cpp
+    src/source/maze_evaluator.cpp
 )
 
-target_include_directories(maze_designer PRIVATE src/include)
+target_include_directories(maze_designer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+)
 target_link_libraries(maze_designer PRIVATE Qt6::Widgets)
-
-if(MINGW)
-    target_compile_options(maze_designer PRIVATE -Wall -Wextra -Wpedantic)
-endif()

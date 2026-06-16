@@ -1,7 +1,52 @@
+# Build
 /build/
 /build-*/
 /dist/
+/out/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# CMake
+CMakeLists.txt.user
+CMakeUserPresets.json
+compile_commands.json
+
+# Qt
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
+*.prl
+
+# IDE
 /.idea/
 /.vscode/
-*.user
-*.autosave
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tool
+.mimocode/
+
+# Generated output
+optimizer_result.json
+logs/

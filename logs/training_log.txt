@@ -1,0 +1,114 @@
+=== Headless Optimizer ===
+Maze: 7x7 | Pop: 30 | Gen: 100
+Coins: 10 | Traps: 6 | Mutation: 15%
+Smart placement: ON | Enhanced fitness: ON | RL: ON
+
+Gen   1/100 | best=641.6 avg=540.4 | dp=380 greedy=-40 regret=420
+Gen   2/100 | best=666.9 avg=527.4 | dp=350 greedy=-70 regret=420
+Gen   3/100 | best=643.9 avg=538.4 | dp=440 greedy=20 regret=420
+Gen   4/100 | best=666.9 avg=535.7 | dp=350 greedy=-70 regret=420
+Gen   5/100 | best=624.9 avg=519.0 | dp=320 greedy=-100 regret=420
+Gen   6/100 | best=666.9 avg=533.1 | dp=350 greedy=-70 regret=420
+Gen   7/100 | best=619.7 avg=493.8 | dp=350 greedy=-70 regret=420
+Gen   8/100 | best=706.2 avg=556.2 | dp=380 greedy=-90 regret=470
+Gen   9/100 | best=650.1 avg=536.4 | dp=320 greedy=-100 regret=420
+Gen  10/100 | best=613.9 avg=509.4 | dp=350 greedy=-40 regret=390
+Gen  11/100 | best=711.0 avg=479.7 | dp=320 greedy=-150 regret=470
+Gen  12/100 | best=674.6 avg=503.2 | dp=320 greedy=-120 regret=440
+Gen  13/100 | best=605.1 avg=503.5 | dp=360 greedy=-40 regret=400
+Gen  14/100 | best=654.9 avg=503.0 | dp=350 greedy=-70 regret=420
+Gen  15/100 | best=708.4 avg=545.6 | dp=410 greedy=-60 regret=470
+Gen  16/100 | best=654.9 avg=530.3 | dp=350 greedy=-70 regret=420
+Gen  17/100 | best=627.3 avg=527.5 | dp=440 greedy=40 regret=400
+Gen  18/100 | best=615.1 avg=518.1 | dp=380 greedy=-20 regret=400
+Gen  19/100 | best=622.5 avg=490.8 | dp=380 greedy=-40 regret=420
+Gen  20/100 | best=696.6 avg=500.0 | dp=380 greedy=-90 regret=470
+Gen  21/100 | best=635.9 avg=515.4 | dp=410 greedy=10 regret=400
+Gen  22/100 | best=667.7 avg=513.4 | dp=320 greedy=-100 regret=420
+Gen  23/100 | best=601.5 avg=490.8 | dp=380 greedy=-10 regret=390
+Gen  24/100 | best=609.9 avg=499.9 | dp=350 greedy=-40 regret=390
+Gen  25/100 | best=711.0 avg=527.7 | dp=320 greedy=-150 regret=470
+Gen  26/100 | best=656.4 avg=521.0 | dp=410 greedy=-10 regret=420
+Gen  27/100 | best=628.6 avg=517.7 | dp=350 greedy=-60 regret=410
+Gen  28/100 | best=668.1 avg=508.3 | dp=350 greedy=-90 regret=440
+Gen  29/100 | best=641.1 avg=547.4 | dp=350 greedy=-60 regret=410
+Gen  30/100 | best=639.6 avg=528.1 | dp=380 greedy=-40 regret=420
+Gen  31/100 | best=664.4 avg=516.3 | dp=350 greedy=-100 regret=450
+Gen  32/100 | best=651.6 avg=484.0 | dp=350 greedy=-70 regret=420
+Gen  33/100 | best=701.4 avg=529.0 | dp=350 greedy=-120 regret=470
+Gen  34/100 | best=656.8 avg=510.8 | dp=380 greedy=-40 regret=420
+Gen  35/100 | best=711.0 avg=545.1 | dp=320 greedy=-150 regret=470
+Gen  36/100 | best=622.5 avg=490.3 | dp=380 greedy=-40 regret=420
+Gen  37/100 | best=678.2 avg=502.2 | dp=380 greedy=-70 regret=450
+Gen  38/100 | best=671.7 avg=503.7 | dp=320 greedy=-120 regret=440
+Gen  39/100 | best=661.1 avg=514.8 | dp=350 greedy=-70 regret=420
+Gen  40/100 | best=643.9 avg=525.1 | dp=350 greedy=-70 regret=420
+Gen  41/100 | best=664.5 avg=550.6 | dp=320 greedy=-100 regret=420
+Gen  42/100 | best=601.9 avg=505.3 | dp=380 greedy=-10 regret=390
+Gen  43/100 | best=673.1 avg=505.0 | dp=350 greedy=-70 regret=420
+Gen  44/100 | best=656.6 avg=511.5 | dp=350 greedy=-90 regret=440
+Gen  45/100 | best=689.9 avg=538.1 | dp=380 greedy=-70 regret=450
+Gen  46/100 | best=653.2 avg=526.7 | dp=350 greedy=-100 regret=450
+Gen  47/100 | best=657.2 avg=517.5 | dp=350 greedy=-70 regret=420
+Gen  48/100 | best=671.6 avg=525.5 | dp=350 greedy=-100 regret=450
+Gen  49/100 | best=605.9 avg=509.7 | dp=380 greedy=-10 regret=390
+Gen  50/100 | best=656.8 avg=542.2 | dp=380 greedy=-40 regret=420
+Gen  51/100 | best=678.7 avg=554.8 | dp=380 greedy=-70 regret=450
+Gen  52/100 | best=665.2 avg=541.9 | dp=440 greedy=-30 regret=470
+Gen  53/100 | best=718.4 avg=510.9 | dp=320 greedy=-150 regret=470
+Gen  54/100 | best=633.4 avg=529.6 | dp=380 greedy=-40 regret=420
+Gen  55/100 | best=669.5 avg=527.3 | dp=380 greedy=-70 regret=450
+Gen  56/100 | best=689.7 avg=550.7 | dp=410 greedy=-60 regret=470
+Gen  57/100 | best=676.6 avg=528.1 | dp=350 greedy=-90 regret=440
+Gen  58/100 | best=710.4 avg=547.0 | dp=380 greedy=-70 regret=450
+Gen  59/100 | best=643.5 avg=527.5 | dp=350 greedy=-70 regret=420
+Gen  60/100 | best=706.2 avg=537.8 | dp=390 greedy=-60 regret=450
+Gen  61/100 | best=681.6 avg=548.0 | dp=350 greedy=-90 regret=440
+Gen  62/100 | best=672.0 avg=553.3 | dp=350 greedy=-70 regret=420
+Gen  63/100 | best=661.6 avg=550.8 | dp=350 greedy=-90 regret=440
+Gen  64/100 | best=701.6 avg=575.0 | dp=350 greedy=-100 regret=450
+Gen  65/100 | best=650.6 avg=502.0 | dp=410 greedy=-10 regret=420
+Gen  66/100 | best=677.1 avg=533.3 | dp=320 greedy=-120 regret=440
+Gen  67/100 | best=674.6 avg=542.5 | dp=320 greedy=-120 regret=440
+Gen  68/100 | best=669.2 avg=517.4 | dp=350 greedy=-70 regret=420
+Gen  69/100 | best=665.6 avg=546.1 | dp=380 greedy=-60 regret=440
+Gen  70/100 | best=742.4 avg=521.4 | dp=380 greedy=-90 regret=470
+Gen  71/100 | best=683.6 avg=543.1 | dp=320 greedy=-120 regret=440
+Gen  72/100 | best=689.9 avg=522.4 | dp=330 greedy=-120 regret=450
+Gen  73/100 | best=672.6 avg=519.1 | dp=350 greedy=-90 regret=440
+Gen  74/100 | best=659.1 avg=523.3 | dp=410 greedy=-10 regret=420
+Gen  75/100 | best=650.1 avg=515.8 | dp=410 greedy=-10 regret=420
+Gen  76/100 | best=652.5 avg=516.7 | dp=410 greedy=-10 regret=420
+Gen  77/100 | best=628.7 avg=504.3 | dp=350 greedy=-70 regret=420
+Gen  78/100 | best=666.1 avg=520.1 | dp=350 greedy=-90 regret=440
+Gen  79/100 | best=704.0 avg=530.4 | dp=350 greedy=-120 regret=470
+Gen  80/100 | best=708.8 avg=533.0 | dp=380 greedy=-90 regret=470
+Gen  81/100 | best=696.6 avg=527.0 | dp=320 greedy=-130 regret=450
+Gen  82/100 | best=635.1 avg=535.6 | dp=350 greedy=-50 regret=400
+Gen  83/100 | best=698.6 avg=547.1 | dp=320 greedy=-120 regret=440
+Gen  84/100 | best=713.6 avg=532.4 | dp=350 greedy=-120 regret=470
+Gen  85/100 | best=724.1 avg=514.8 | dp=440 greedy=-10 regret=450
+Gen  86/100 | best=658.7 avg=532.6 | dp=410 greedy=-10 regret=420
+Gen  87/100 | best=675.2 avg=541.5 | dp=350 greedy=-100 regret=450
+Gen  88/100 | best=637.7 avg=501.1 | dp=380 greedy=-40 regret=420
+Gen  89/100 | best=663.1 avg=507.7 | dp=350 greedy=-90 regret=440
+Gen  90/100 | best=637.7 avg=536.7 | dp=350 greedy=-70 regret=420
+Gen  91/100 | best=658.6 avg=533.8 | dp=380 greedy=-20 regret=400
+Gen  92/100 | best=714.9 avg=564.6 | dp=410 greedy=-40 regret=450
+Gen  93/100 | best=674.1 avg=545.3 | dp=380 greedy=-70 regret=450
+Gen  94/100 | best=684.0 avg=538.4 | dp=380 greedy=-60 regret=440
+Gen  95/100 | best=685.3 avg=537.6 | dp=380 greedy=-70 regret=450
+Gen  96/100 | best=709.6 avg=538.1 | dp=380 greedy=-60 regret=440
+Gen  97/100 | best=659.1 avg=531.9 | dp=360 greedy=-60 regret=420
+Gen  98/100 | best=622.1 avg=525.3 | dp=350 greedy=-70 regret=420
+Gen  99/100 | best=613.3 avg=502.9 | dp=420 greedy=20 regret=400
+Gen 100/100 | best=650.1 avg=511.8 | dp=380 greedy=-40 regret=420
+
+=== Result ===
+DP optimal: 380
+Greedy worst: -90
+Regret: 470
+Topo difficulty: 1.15918
+Final fitness: 742.408
+Valid: YES
+Saved: optimizer_result.json
