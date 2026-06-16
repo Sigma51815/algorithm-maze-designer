@@ -140,9 +140,9 @@ void MainWindow::buildUi() {
     generationForm->addRow(QStringLiteral("速度"), animationSpin_);
     generationLayout->addLayout(generationForm);
 
-    auto *generateButton = new QPushButton(QStringLiteral("生成并播放过程"));
-    generateButton->setObjectName(QStringLiteral("primaryButton"));
-    generationLayout->addWidget(generateButton);
+    generateButton_ = new QPushButton(QStringLiteral("生成并播放过程"));
+    generateButton_->setObjectName(QStringLiteral("primaryButton"));
+    generationLayout->addWidget(generateButton_);
     validationLabel_ = new QLabel;
     validationLabel_->setObjectName(QStringLiteral("resultLabel"));
     validationLabel_->setWordWrap(true);
@@ -164,7 +164,7 @@ void MainWindow::buildUi() {
     };
     connect(algorithmBox_, &QComboBox::currentIndexChanged, this, updateComplexity);
     updateComplexity(algorithmBox_->currentIndex());
-    connect(generateButton, &QPushButton::clicked, this, &MainWindow::generateMaze);
+    connect(generateButton_, &QPushButton::clicked, this, &MainWindow::generateMaze);
 
     // ── sub-separator: 遗传算法优化（合并进①） ──
     auto *optSep = new QFrame;
@@ -217,21 +217,13 @@ void MainWindow::buildUi() {
         if (optPopSpin_) optPopSpin_->setEnabled(enabled);
         if (optGenSpin_) optGenSpin_->setEnabled(enabled);
         if (optMutSpin_) optMutSpin_->setEnabled(enabled);
-        if (optRunButton_) optRunButton_->setEnabled(enabled);
+        // generateButton_ handles its own state via optEnableCheck_
     };
     connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
 
     generationLayout->addLayout(optForm);
-    auto *optButtons = new QHBoxLayout;
-    optButtons->setSpacing(8);
-    optRunButton_ = new QPushButton(QStringLiteral("运行优化"));
-    optRunButton_->setObjectName(QStringLiteral("primaryButton"));
-    optStopButton_ = new QPushButton(QStringLiteral("停止"));
-    optStopButton_->setObjectName(QStringLiteral("secondaryButton"));
-    optStopButton_->setEnabled(false);
-    optButtons->addWidget(optRunButton_);
-    optButtons->addWidget(optStopButton_);
-    generationLayout->addLayout(optButtons);
+    // "运行优化" merged into the main generate button above;
+    // clicking generateButton_ with optimization ON triggers optimize.
     optProgressLabel_ = new QLabel(QStringLiteral("PAIRED 适应度 = DP最优 − Greedy玩家得分"));
     optProgressLabel_->setObjectName(QStringLiteral("infoCard"));
     optProgressLabel_->setWordWrap(true);
@@ -259,7 +251,7 @@ void MainWindow::buildUi() {
     optButtonRow->addWidget(applyOptButton);
     optButtonRow->addWidget(saveOptButton);
     generationLayout->addLayout(optButtonRow);
-    connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
+    // runOptimizer now triggered from generateButton_ click
     connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
     connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
 
@@ -323,8 +315,7 @@ void MainWindow::buildUi() {
         optPopSpin_->setEnabled(false);
         optGenSpin_->setEnabled(false);
         optMutSpin_->setEnabled(false);
-        optRunButton_->setEnabled(false);
-    }
+            }
 
     panelLayout->addWidget(makeSeparator());
 
@@ -1031,16 +1022,15 @@ void MainWindow::runOptimizer() {
     cfg.coinCount = autoCoinCount(cells);
     cfg.trapCount = autoTrapCount(cells);
     cfg.seed = static_cast<quint32>(seedSpin_->value());
-    cfg.useMixedAlgorithms = true;
+    cfg.useMixedAlgorithms = false;
+    cfg.baseAlgorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
     cfg.useAdversarialPlacement = optAdversarialCheck_->isChecked();
     cfg.useSmartPlacement = !cfg.useAdversarialPlacement;
     cfg.useEnhancedFitness = true;
     preOptMaze_ = maze_;  // snapshot for before/after comparison
     cfg.topoWeight = 0.3;
 
-    optRunButton_->setEnabled(false);
-    optStopButton_->setEnabled(true);
-    optApplyButton_->setEnabled(false);
+        optApplyButton_->setEnabled(false);
     optCompareButton_->setEnabled(false);
     optResultLabel_->setVisible(false);
     optProgressLabel_->setText(QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
@@ -1069,16 +1059,12 @@ void MainWindow::runOptimizer() {
                         .arg(rlTag));
             });
 
-    connect(optStopButton_, &QPushButton::clicked, optimizer, &MazeOptimizer::stop,
-            Qt::DirectConnection);
 
     connect(optimizer, &MazeOptimizer::finished, this,
             [this, thread, optimizer, cfg](const MazeModel &bestMaze) {
                 optimizedMaze_ = bestMaze;
                 hasOptimizedMaze_ = true;
                 lastOptConfig_ = cfg;
-                optRunButton_->setEnabled(true);
-                optStopButton_->setEnabled(false);
                 optApplyButton_->setEnabled(true);
                 optSaveButton_->setEnabled(true);
                 optCompareButton_->setEnabled(true);

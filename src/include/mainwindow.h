@@ -38,6 +38,7 @@ private:
     QSpinBox *seedSpin_ = nullptr;
     QSpinBox *animationSpin_ = nullptr;
     QLabel *validationLabel_ = nullptr;
+    QPushButton *generateButton_ = nullptr;
     QLabel *resourceResultLabel_ = nullptr;
     QLabel *coinInfoLabel_ = nullptr;
     QLabel *trapInfoLabel_ = nullptr;
@@ -58,8 +59,6 @@ private:
     QLabel *optAlgoLabel_ = nullptr;
     QLabel *optProgressLabel_ = nullptr;
     QLabel *optResultLabel_ = nullptr;
-    QPushButton *optRunButton_ = nullptr;
-    QPushButton *optStopButton_ = nullptr;
     QPushButton *optApplyButton_ = nullptr;
     QPushButton *optSaveButton_ = nullptr;
     QCheckBox *optAdversarialCheck_ = nullptr;
