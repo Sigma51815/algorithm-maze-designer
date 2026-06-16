@@ -1,13 +1,9 @@
-# Build
+# ===========================
+# 构建产物
+# ===========================
 /build/
 /dist/
 /out/
-
-# CMake (generated inside build/)
-CMakeLists.txt.user
-compile_commands.json
-
-# Object files
 *.o
 *.obj
 *.a
@@ -15,7 +11,17 @@ compile_commands.json
 *.dylib
 *.dll
 
-# Qt generated
+# ===========================
+# CMake 生成文件
+# ===========================
+CMakeLists.txt.user
+compile_commands.json
+CMakeCache.txt
+cmake_install.cmake
+
+# ===========================
+# Qt 生成文件
+# ===========================
 *.moc
 moc_*.cpp
 moc_*.h
@@ -23,28 +29,49 @@ qrc_*.cpp
 ui_*.h
 *.autosave
 *.prl
+*.qm
 
+# ===========================
 # IDE
+# ===========================
 /.idea/
 /.vscode/
 *.swp
 *.swo
 *~
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
 
+# ===========================
+# 操作系统
+# ===========================
 # macOS
 .DS_Store
-
+.AppleDouble
+.LSOverride
+._*
 # Windows
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 *.exe
 *.app
-*.tmp
+*.msi
+*.lnk
 
-# MiMoCode
+# ===========================
+# 工具内部
+# ===========================
 .mimocode/
-AGENTS.md
-CLAUDE.md
 
-# Docs (reference materials, not source code)
-/docs/
+# ===========================
+# 生成的运行结果（不入库）
+# ===========================
 optimizer_result.json
+logs/
