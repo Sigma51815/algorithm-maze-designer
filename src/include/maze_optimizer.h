@@ -1,7 +1,6 @@
 #pragma once
 
 #include "maze.h"
-#include "qlearning_optimizer.h"
 
 #include <QObject>
 
@@ -20,10 +19,6 @@ struct OptimizerConfig {
     int trapCount = 5;
     MazeAlgorithm baseAlgorithm = MazeAlgorithm::BreadthFirstSearch;
     quint32 seed = 42;
-    bool enableRL = false;
-    int rlEpisodes = 50;
-    int rlTopK = 3;
-    int rlRefineSteps = 5;
     // When true (default) the initial population is seeded by round-robining
     // all four base algorithms (DivideAndConquer/KruskalMst/DFS/BFS) so the GA
     // optimizes *on top of* the four base algorithms instead of a single one.

@@ -8,7 +8,6 @@
 #include "maze.h"
 #include "maze_evaluator.h"
 #include "maze_optimizer.h"
-#include "qlearning_optimizer.h"
 #include "resource_placer.h"
 
 #include <QApplication>
@@ -189,7 +188,7 @@ int runSelfTests() {
             output << "FAIL maze algorithm " << i << ": " << reason << '\n';
             return 1;
         }
-        maze.placeResources(30, 20, static_cast<quint32>(2000 + i));
+        maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), static_cast<quint32>(2000 + i));
         const ResourcePlan plan = maze.optimalResourceWalk();
         if (plan.walk.isEmpty() || plan.walk.first() != maze.startCell()
             || plan.walk.last() != maze.endCell()) {
@@ -223,7 +222,7 @@ int runSelfTests() {
     for (int i = 0; i < algorithms.size(); ++i) {
         MazeModel maze;
         maze.generate(4, 4, algorithms[i], static_cast<quint32>(3000 + i));
-        maze.placeResources(5, 5, static_cast<quint32>(4000 + i));
+        maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), static_cast<quint32>(4000 + i));
         const ResourcePlan plan = maze.optimalResourceWalk();
         const int bruteForceValue = bruteForceResourceMaximum(maze);
         if (plan.maxValue != bruteForceValue) {
@@ -282,7 +281,7 @@ int runSelfTests() {
     {
         MazeModel bossMaze;
         bossMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 50000U);
-        bossMaze.placeResources(5, 3, 50001U);
+        bossMaze.placeResources(autoCoinCount(bossMaze.cellCount()), autoTrapCount(bossMaze.cellCount()), 50001U);
         BossFullResult fullResult = BossSolver::solveWithMaze(bossMaze, bosses, skills, 2);
         if (!fullResult.solved) {
             output << "FAIL solveWithMaze: not solved\n";
@@ -309,7 +308,7 @@ int runSelfTests() {
 
     MazeModel contractMaze;
     contractMaze.generate(7, 7, MazeAlgorithm::KruskalMst, 202506U);
-    contractMaze.placeResources(8, 6, 202507U);
+    contractMaze.placeResources(autoCoinCount(contractMaze.cellCount()), autoTrapCount(contractMaze.cellCount()), 202507U);
     const QJsonObject contract = buildAiPlayerInput(
         contractMaze, bosses, skills, 20, 5);
     const QByteArray serializedContract = serializeAiPlayerInput(
@@ -378,7 +377,7 @@ int runSelfTests() {
     {
         MazeModel original;
         original.generate(5, 5, MazeAlgorithm::KruskalMst, 80000U);
-        original.placeResources(5, 3, 80001U);
+        original.placeResources(autoCoinCount(original.cellCount()), autoTrapCount(original.cellCount()), 80001U);
         original.setBossCell(original.cellCount() / 2);
         const QJsonObject exported = original.toJson();
         const QJsonArray matrix = exported.value(QStringLiteral("expandedMatrix")).toArray();
@@ -413,7 +412,7 @@ int runSelfTests() {
     {
         MazeModel maze;
         maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
-        maze.placeResources(28, 18, static_cast<quint32>(42));
+        maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), static_cast<quint32>(42));
         PlayResult result = GreedyPlayer::play(maze);
         if (!result.reachedEnd || result.totalSteps <= 0) {
             output << "FAIL greedy AI\n";
@@ -426,7 +425,7 @@ int runSelfTests() {
     {
         MazeModel bigMaze;
         bigMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
-        bigMaze.placeResources(28, 18, static_cast<quint32>(43));
+        bigMaze.placeResources(autoCoinCount(bigMaze.cellCount()), autoTrapCount(bigMaze.cellCount()), static_cast<quint32>(43));
         int totalValue = 0, totalSteps = 0, caseCount = 0;
         const QVector<int> testCells{38, 56, 112, 168, 196};
         for (int cell : testCells) {
@@ -446,7 +445,7 @@ int runSelfTests() {
     {
         MazeModel maze;
         maze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, static_cast<quint32>(42));
-        maze.placeResources(28, 18, static_cast<quint32>(42));
+        maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), static_cast<quint32>(42));
         const QVector<int> bossHealth{35, 45};
         const QVector<BossSkill> bossSkills{{QStringLiteral("Normal"), 5, 0},
                                              {QStringLiteral("Heavy"), 10, 2},
@@ -460,7 +459,7 @@ int runSelfTests() {
     {
         MazeModel baseMaze;
         baseMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 9000U);
-        baseMaze.placeResources(5, 3, 9001U);
+        baseMaze.placeResources(autoCoinCount(baseMaze.cellCount()), autoTrapCount(baseMaze.cellCount()), 9001U);
         const ResourcePlan dpPlan = baseMaze.optimalResourceWalk();
 
         int worstGreedy = std::numeric_limits<int>::max();
@@ -485,8 +484,7 @@ int runSelfTests() {
         cfg.tournamentSize = 3;
         cfg.baseAlgorithm = MazeAlgorithm::KruskalMst;
         cfg.seed = 9000U;
-        cfg.coinCount = 5;
-        cfg.trapCount = 3;
+        { int cells = cfg.rows * cfg.columns; cfg.coinCount = autoCoinCount(cells); cfg.trapCount = autoTrapCount(cells); }
 
         MazeOptimizer optimizer;
         optimizer.setConfig(cfg);
@@ -511,7 +509,7 @@ int runSelfTests() {
     {
         MazeModel trainMaze;
         trainMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
-        trainMaze.placeResources(30, 20, 11001U);
+        trainMaze.placeResources(autoCoinCount(trainMaze.cellCount()), autoTrapCount(trainMaze.cellCount()), 11001U);
 
         RLPlayer rlPlayer;
         RLConfig rlCfg;
@@ -526,12 +524,12 @@ int runSelfTests() {
 
         MazeModel testMaze;
         testMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
-        testMaze.placeResources(30, 20, 55000U);
+        testMaze.placeResources(autoCoinCount(testMaze.cellCount()), autoTrapCount(testMaze.cellCount()), 55000U);
         const RLPlayResult testResult = rlPlayer.play(testMaze, rlCfg);
 
         MazeModel genMaze;
         genMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 22000U);
-        genMaze.placeResources(30, 20, 22001U);
+        genMaze.placeResources(autoCoinCount(genMaze.cellCount()), autoTrapCount(genMaze.cellCount()), 22001U);
         const RLPlayResult genResult = rlPlayer.play(genMaze, rlCfg);
 
         if (after.totalResource < before.totalResource - 150) {
@@ -553,13 +551,11 @@ int runSelfTests() {
         cfg.gaPopulation = 8;
         cfg.gaMutationRate = 0.3;
         cfg.rlTrainEpisodes = 200;
-        cfg.rlTopK = 3;
         cfg.mazeRows = 15;
         cfg.mazeCols = 15;
         cfg.baseAlgorithm = MazeAlgorithm::KruskalMst;
         cfg.baseSeed = 12000U;
-        cfg.coinCount = 5;
-        cfg.trapCount = 3;
+                { int cells = cfg.mazeRows * cfg.mazeCols; cfg.coinCount = autoCoinCount(cells); cfg.trapCount = autoTrapCount(cells); }
 
         CoEvolution coEvol;
         const CoEvolResult coResult = coEvol.run(cfg);
@@ -602,8 +598,7 @@ int runSelfTests() {
         mixedCfg.tournamentSize = 2;
         mixedCfg.baseAlgorithm = MazeAlgorithm::BreadthFirstSearch;
         mixedCfg.seed = 77000U;
-        mixedCfg.coinCount = 5;
-        mixedCfg.trapCount = 3;
+                { int cells = mixedCfg.rows * mixedCfg.columns; mixedCfg.coinCount = autoCoinCount(cells); mixedCfg.trapCount = autoTrapCount(cells); }
         mixedCfg.useMixedAlgorithms = true;
 
         MazeOptimizer mixedOpt;
@@ -671,7 +666,7 @@ int runSelfTests() {
     {
         MazeModel maze;
         maze.generate(5, 5, MazeAlgorithm::KruskalMst, 60000U);
-        maze.placeResources(5, 3, 60001U);
+        maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), 60001U);
 
         EvaluatorConfig ec;
         ec.useSmartPlacement = false;
@@ -704,8 +699,7 @@ int runSelfTests() {
         baseCfg.mutationRate = 0.3;
         baseCfg.tournamentSize = 3;
         baseCfg.seed = 70000U;
-        baseCfg.coinCount = 10;
-        baseCfg.trapCount = 6;
+                { int cells = baseCfg.rows * baseCfg.columns; baseCfg.coinCount = autoCoinCount(cells); baseCfg.trapCount = autoTrapCount(cells); }
         baseCfg.useMixedAlgorithms = true;
 
         OptimizerConfig randomCfg = baseCfg;
@@ -769,8 +763,11 @@ int runSelfTests() {
         cfg.mutationRate = 0.3;
         cfg.tournamentSize = 3;
         cfg.seed = 80000U;
-        cfg.coinCount = 8;
-        cfg.trapCount = 5;
+        {
+            int cells = cfg.rows * cfg.columns;
+            cfg.coinCount = autoCoinCount(cells);
+            cfg.trapCount = autoTrapCount(cells);
+        }
         cfg.useMixedAlgorithms = true;
         cfg.useSmartPlacement = true;
         cfg.useEnhancedFitness = true;
@@ -838,10 +835,13 @@ int main(int argc, char *argv[]) {
         cfg.generations = 30;
         cfg.mutationRate = 0.15;
         cfg.tournamentSize = 3;
-        cfg.coinCount = 8;
-        cfg.trapCount = 5;
+        {
+            int cells = cfg.rows * cfg.columns;
+            cfg.coinCount = autoCoinCount(cells);
+            cfg.trapCount = autoTrapCount(cells);
+        }
         cfg.useMixedAlgorithms = true;
-        cfg.useSmartPlacement = true;
+        cfg.useAdversarialPlacement = true;
         cfg.useEnhancedFitness = true;
         cfg.topoWeight = 0.3;
         cfg.seed = 42;
@@ -855,11 +855,7 @@ int main(int argc, char *argv[]) {
             else if (arg("--population")) cfg.populationSize = std::atoi(argv[++i]);
             else if (arg("--generations")) cfg.generations = std::atoi(argv[++i]);
             else if (arg("--mutation-rate")) cfg.mutationRate = std::atof(argv[++i]);
-            else if (arg("--coins")) cfg.coinCount = std::atoi(argv[++i]);
-            else if (arg("--traps")) cfg.trapCount = std::atoi(argv[++i]);
             else if (arg("--seed")) cfg.seed = static_cast<quint32>(std::atoll(argv[++i]));
-            else if (arg("--enable-rl")) cfg.enableRL = (std::atoi(argv[++i]) != 0);
-            else if (arg("--rl-episodes")) cfg.rlEpisodes = std::atoi(argv[++i]);
             else if (arg("--topo-weight")) cfg.topoWeight = std::atof(argv[++i]);
         }
 
@@ -869,9 +865,7 @@ int main(int argc, char *argv[]) {
             << " | Gen: " << cfg.generations << "\n";
         out << "Coins: " << cfg.coinCount << " | Traps: " << cfg.trapCount
             << " | Mutation: " << (cfg.mutationRate * 100) << "%\n";
-        out << "Smart placement: " << (cfg.useSmartPlacement ? "ON" : "OFF")
-            << " | Enhanced fitness: " << (cfg.useEnhancedFitness ? "ON" : "OFF")
-            << " | RL: " << (cfg.enableRL ? "ON" : "OFF") << "\n\n";
+        out << "Adversarial placement: ON | Enhanced fitness: " << (cfg.useEnhancedFitness ? "ON" : "OFF") << "\n\n";
 
         MazeOptimizer optimizer;
         optimizer.setConfig(cfg);

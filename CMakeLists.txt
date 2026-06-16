@@ -13,9 +13,8 @@ add_executable(maze_designer
     src/include/mainwindow.h
     src/include/mazewidget.h
     src/include/battlewindow.h
-    src/include/maze_optimizer.h
-    src/include/maze_saver.h
-    src/include/qlearning_optimizer.h
+	    src/include/maze_optimizer.h
+	    src/include/maze_saver.h
     src/include/ai/greedy_player.h
     src/include/ai/aiplayerformat.h
     src/include/ai/rl_player.h
@@ -28,9 +27,8 @@ add_executable(maze_designer
     src/source/mainwindow.cpp
     src/source/mazewidget.cpp
     src/source/battlewindow.cpp
-    src/source/maze_optimizer.cpp
-    src/source/maze_saver.cpp
-    src/source/qlearning_optimizer.cpp
+	    src/source/maze_optimizer.cpp
+	    src/source/maze_saver.cpp
     src/source/ai/greedy_player.cpp
     src/source/ai/aiplayerformat.cpp
     src/source/ai/rl_player.cpp

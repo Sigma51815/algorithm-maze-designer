@@ -37,10 +37,10 @@ private:
     QSpinBox *columnsSpin_ = nullptr;
     QSpinBox *seedSpin_ = nullptr;
     QSpinBox *animationSpin_ = nullptr;
-    QSpinBox *coinSpin_ = nullptr;
-    QSpinBox *trapSpin_ = nullptr;
     QLabel *validationLabel_ = nullptr;
     QLabel *resourceResultLabel_ = nullptr;
+    QLabel *coinInfoLabel_ = nullptr;
+    QLabel *trapInfoLabel_ = nullptr;
     QLineEdit *bossHealthEdit_ = nullptr;
     QLineEdit *skillsEdit_ = nullptr;
     QPlainTextEdit *bossOutput_ = nullptr;
@@ -64,9 +64,8 @@ private:
     QPushButton *optSaveButton_ = nullptr;
     QCheckBox *optAdversarialCheck_ = nullptr;
     QLabel *optTopoLabel_ = nullptr;
-    QCheckBox *optRLCheck_ = nullptr;
-    QSpinBox *optRLEpisodesSpin_ = nullptr;
-    QSpinBox *optRLTopKSpin_ = nullptr;
+    QPushButton *optCompareButton_ = nullptr;
+    QLabel *optCompareLabel_ = nullptr;
     MazeModel optimizedMaze_;
     bool hasOptimizedMaze_ = false;
     OptimizerConfig lastOptConfig_;

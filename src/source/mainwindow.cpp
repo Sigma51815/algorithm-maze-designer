@@ -42,23 +42,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
 void MainWindow::stopAiWorker() {
     if (!aiWorkerThread_) return;
-    disconnect(aiWorkerThread_, &QThread::finished, nullptr, nullptr);
+    // Disconnect BEFORE quit/wait so the finished lambda won't fire on a deleted thread.
+    disconnect(aiWorkerThread_, nullptr, nullptr, nullptr);
     aiWorkerThread_->quit();
     aiWorkerThread_->wait();
-    delete aiWorker_;
-    aiWorker_ = nullptr;
-    delete aiWorkerThread_;
+    aiWorkerThread_->deleteLater();
+    if (aiWorker_) { aiWorker_->deleteLater(); aiWorker_ = nullptr; }
     aiWorkerThread_ = nullptr;
 }
 
 void MainWindow::stopOptimizer() {
     if (!optimizerThread_) return;
+    // Disconnect BEFORE quit/wait so the finished lambda won't fire on a deleted thread.
     disconnect(optimizerThread_, nullptr, nullptr, nullptr);
     optimizerThread_->quit();
     optimizerThread_->wait();
-    delete optimizer_;
-    optimizer_ = nullptr;
-    delete optimizerThread_;
+    optimizerThread_->deleteLater();
+    if (optimizer_) { optimizer_->deleteLater(); optimizer_ = nullptr; }
     optimizerThread_ = nullptr;
 }
 
@@ -212,48 +212,12 @@ void MainWindow::buildUi() {
         "对抗式资源分布：陷阱放分叉口挡路，金币藏深处，最小化AI分数"));
     optForm->addRow(QStringLiteral("优化模式"), optAdversarialCheck_);
 
-    optRLCheck_ = new QCheckBox(QStringLiteral("启用 Q-Learning 精调"));
-    optRLCheck_->setObjectName(QStringLiteral("inputControl"));
-    optRLCheck_->setToolTip(QStringLiteral(
-        "默认关闭：每代 GA 后用 RL 微调 top-k 个体，CPU 负载显著增加。"));
-    optForm->addRow(QStringLiteral("RL"), optRLCheck_);
-    optRLEpisodesSpin_ = new QSpinBox;
-    optRLEpisodesSpin_->setObjectName(QStringLiteral("inputControl"));
-    optRLEpisodesSpin_->setRange(10, 500);
-    optRLEpisodesSpin_->setValue(50);
-    optRLEpisodesSpin_->setEnabled(false);
-    optRLTopKSpin_ = new QSpinBox;
-    optRLTopKSpin_->setObjectName(QStringLiteral("inputControl"));
-    optRLTopKSpin_->setRange(1, 20);
-    optRLTopKSpin_->setValue(3);
-    optRLTopKSpin_->setEnabled(false);
-    optForm->addRow(QStringLiteral("RL 回合"), optRLEpisodesSpin_);
-    optForm->addRow(QStringLiteral("RL Top-K"), optRLTopKSpin_);
-
-    connect(optRLCheck_, &QCheckBox::toggled, this, [this](bool checked) {
-        if (!optEnableCheck_->isChecked()) {
-            optRLEpisodesSpin_->setEnabled(false);
-            optRLTopKSpin_->setEnabled(false);
-            return;
-        }
-        optRLEpisodesSpin_->setEnabled(checked);
-        optRLTopKSpin_->setEnabled(checked);
-    });
-
     // GA master switch: lock/unlock the optimization sub-panel.
     auto updateOptPanelEnabled = [this](bool enabled) {
         if (optPopSpin_) optPopSpin_->setEnabled(enabled);
         if (optGenSpin_) optGenSpin_->setEnabled(enabled);
         if (optMutSpin_) optMutSpin_->setEnabled(enabled);
-        if (optRLCheck_) optRLCheck_->setEnabled(enabled);
         if (optRunButton_) optRunButton_->setEnabled(enabled);
-        if (!enabled) {
-            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(false);
-            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(false);
-        } else if (optRLCheck_ && optRLCheck_->isChecked()) {
-            if (optRLEpisodesSpin_) optRLEpisodesSpin_->setEnabled(true);
-            if (optRLTopKSpin_) optRLTopKSpin_->setEnabled(true);
-        }
     };
     connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
 
@@ -298,12 +262,70 @@ void MainWindow::buildUi() {
     connect(optRunButton_, &QPushButton::clicked, this, &MainWindow::runOptimizer);
     connect(optApplyButton_, &QPushButton::clicked, this, &MainWindow::applyOptimizedMaze);
     connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
+
+    // Compare button: runs AI on both the original and the optimized maze
+    // and displays a multi-metric comparison.
+    optCompareButton_ = new QPushButton(QStringLiteral("对比评估（原迷宫 vs 优化）"));
+    optCompareButton_->setObjectName(QStringLiteral("secondaryButton"));
+    optCompareButton_->setEnabled(false);
+    optCompareButton_->setToolTip(
+        QStringLiteral("同时评估原始迷宫和优化后迷宫的难度指标"));
+    generationLayout->addWidget(optCompareButton_);
+    optCompareLabel_ = new QLabel;
+    optCompareLabel_->setObjectName(QStringLiteral("infoCard"));
+    optCompareLabel_->setWordWrap(true);
+    optCompareLabel_->setVisible(false);
+    generationLayout->addWidget(optCompareLabel_);
+    connect(optCompareButton_, &QPushButton::clicked, this, [this]() {
+        if (!hasOptimizedMaze_ || maze_.cellCount() == 0) return;
+        MazeModel saved = maze_;  // current (possibly non-optimized) maze
+
+        // Evaluate current maze.
+        EvaluatorConfig ec;
+        ec.skipPlacement = true;
+        ec.topoWeight = 0.3;
+        EvalResult before = MazeEvaluator::evaluate(saved, ec);
+
+        // Evaluate optimized maze.
+        EvalResult after = MazeEvaluator::evaluate(optimizedMaze_, ec);
+
+        QString report;
+        report += QStringLiteral(
+            "<b>对比评估</b><br/>"
+            "<table style='border-spacing:8px 2px'>"
+            "<tr><td></td><td><b>原迷宫</b></td><td><b>优化后</b></td></tr>"
+            "<tr><td>金币漏拾率</td>"
+                "<td>%1%</td><td>%2%</td></tr>"
+            "<tr><td>陷阱命中率</td>"
+                "<td>%3%</td><td>%4%</td></tr>"
+            "<tr><td>路径迂回度</td>"
+                "<td>%5%</td><td>%6%</td></tr>"
+            "<tr><td>综合难度分</td>"
+                "<td>%7</td><td style='color:#2E7D32'><b>%8</b></td></tr>"
+            "</table>")
+            .arg(before.coinMissRate * 100, 0, 'f', 1)
+            .arg(after.coinMissRate * 100, 0, 'f', 1)
+            .arg(before.trapHitRate * 100, 0, 'f', 1)
+            .arg(after.trapHitRate * 100, 0, 'f', 1)
+            .arg(before.pathInefficiency * 100, 0, 'f', 1)
+            .arg(after.pathInefficiency * 100, 0, 'f', 1)
+            .arg(before.finalFitness, 0, 'f', 1)
+            .arg(after.finalFitness, 0, 'f', 1);
+
+        bool improved = after.finalFitness > before.finalFitness;
+        report += improved
+            ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化后迷宫更难（难度分提升）</b>")
+            : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化后迷宫未变难</b>");
+
+        optCompareLabel_->setText(report);
+        optCompareLabel_->setVisible(true);
+    });
+
     // Lock the optimization sub-panel initially (GA off by default).
     if (!optEnableCheck_->isChecked()) {
         optPopSpin_->setEnabled(false);
         optGenSpin_->setEnabled(false);
         optMutSpin_->setEnabled(false);
-        optRLCheck_->setEnabled(false);
         optRunButton_->setEnabled(false);
     }
 
@@ -316,16 +338,14 @@ void MainWindow::buildUi() {
     auto *resourceForm = new QFormLayout;
     resourceForm->setSpacing(6);
     resourceForm->setLabelAlignment(Qt::AlignRight);
-    coinSpin_ = new QSpinBox;
-    coinSpin_->setObjectName(QStringLiteral("inputControl"));
-    coinSpin_->setRange(0, 300);
-    coinSpin_->setValue(8);
-    trapSpin_ = new QSpinBox;
-    trapSpin_->setObjectName(QStringLiteral("inputControl"));
-    trapSpin_->setRange(0, 300);
-    trapSpin_->setValue(6);
-    resourceForm->addRow(QStringLiteral("金币"), coinSpin_);
-    resourceForm->addRow(QStringLiteral("陷阱"), trapSpin_);
+    // Resource counts are now auto-derived from maze dimensions;
+    // displayed as info labels instead of user-editable spinboxes.
+    coinInfoLabel_ = new QLabel(QStringLiteral("—"));
+    coinInfoLabel_->setObjectName(QStringLiteral("infoCard"));
+    trapInfoLabel_ = new QLabel(QStringLiteral("—"));
+    trapInfoLabel_->setObjectName(QStringLiteral("infoCard"));
+    resourceForm->addRow(QStringLiteral("金币"), coinInfoLabel_);
+    resourceForm->addRow(QStringLiteral("陷阱"), trapInfoLabel_);
     resourceLayout->addLayout(resourceForm);
     auto *resourceButtons = new QHBoxLayout;
     resourceButtons->setSpacing(8);
@@ -581,8 +601,11 @@ void MainWindow::generateMaze() {
     columnsSpin_->setValue(matrixColumns);
     maze_.generate((matrixRows - 1) / 2, (matrixColumns - 1) / 2, algorithm,
                    static_cast<quint32>(seedSpin_->value()));
-    maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
+    const int cells = maze_.cellCount();
+    maze_.placeResources(autoCoinCount(cells), autoTrapCount(cells),
                          static_cast<quint32>(seedSpin_->value() + 1));
+    if (coinInfoLabel_) coinInfoLabel_->setText(QStringLiteral("~%1").arg(autoCoinCount(cells)));
+    if (trapInfoLabel_) trapInfoLabel_->setText(QStringLiteral("~%1").arg(autoTrapCount(cells)));
     lastPlan_ = {};
     lastBossResult_ = {};
     resourceResultLabel_->setText(QStringLiteral("尚未求解"));
@@ -599,8 +622,11 @@ void MainWindow::placeResources() {
         return;
     }
     pathTimer_->stop();
-    maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
+    const int cells = maze_.cellCount();
+    maze_.placeResources(autoCoinCount(cells), autoTrapCount(cells),
                          static_cast<quint32>(seedSpin_->value() + 1));
+    if (coinInfoLabel_) coinInfoLabel_->setText(QStringLiteral("~%1").arg(autoCoinCount(cells)));
+    if (trapInfoLabel_) trapInfoLabel_->setText(QStringLiteral("~%1").arg(autoTrapCount(cells)));
     lastPlan_ = {};
     resourceResultLabel_->setText(QStringLiteral("资源已重新布置，等待 DP 求解"));
     mazeWidget_->setMaze(maze_);
@@ -889,12 +915,8 @@ void MainWindow::runAiPlayer() {
         QMetaObject::invokeMethod(worker, [worker]() { worker->thread()->quit(); });
     });
 
-    connect(thread, &QThread::finished, this, [this, thread, worker, resultCopy]() {
-        disconnect(thread, &QThread::finished, nullptr, nullptr);
-        thread->quit();
-        thread->wait();
-        delete worker;
-        delete thread;
+    connect(thread, &QThread::finished, this, [this, worker, thread, resultCopy]() {
+        // Async cleanup — never block the main thread with wait().
         aiWorker_ = nullptr;
         aiWorkerThread_ = nullptr;
         lastAiResult_ = *resultCopy;
@@ -902,34 +924,33 @@ void MainWindow::runAiPlayer() {
         if (!lastAiResult_.reachedEnd) {
             aiStatusLabel_->setText(QStringLiteral("❌ AI 未能到达终点"));
             statusBar()->showMessage(QStringLiteral("AI 玩家未能到达终点"), 5000);
-            return;
-        }
-
-        aiStatusLabel_->setVisible(false);
-        revealedAiPoints_ = 1;
-        mazeWidget_->setAiPath(lastAiResult_.walk, revealedAiPoints_);
-        aiPathTimer_->start();
-
-        aiResultLabel_->setText(QStringLiteral(
-            "<b>AI 探险结果</b><br/>"
-            "剩余资源价值：<b>%1</b><br/>"
-            "所用步数：<b>%2</b><br/>"
-            "效率比值（价值/步数）：<b>%3</b><br/>"
-            "<span style='font-size:11px'>金币 %4 | 陷阱 %5</span>")
-            .arg(lastAiResult_.remainingResource)
-            .arg(lastAiResult_.totalSteps)
-            .arg(lastAiResult_.score, 0, 'f', 3)
-            .arg(lastAiResult_.collectedCoins)
-            .arg(lastAiResult_.triggeredTraps));
-        aiResultLabel_->setVisible(true);
-
-        statusBar()->showMessage(
-            QStringLiteral("AI 玩家完成：score=%1, 步数=%2, 金币=%3, 陷阱=%4")
-                .arg(lastAiResult_.score, 0, 'f', 2)
+        } else {
+            aiStatusLabel_->setVisible(false);
+            revealedAiPoints_ = 1;
+            mazeWidget_->setAiPath(lastAiResult_.walk, revealedAiPoints_);
+            aiPathTimer_->start();
+            aiResultLabel_->setText(QStringLiteral(
+                "<b>AI 探险结果</b><br/>"
+                "剩余资源价值：<b>%1</b><br/>"
+                "所用步数：<b>%2</b><br/>"
+                "效率比值（价值/步数）：<b>%3</b><br/>"
+                "<span style='font-size:11px'>金币 %4 | 陷阱 %5</span>")
+                .arg(lastAiResult_.remainingResource)
                 .arg(lastAiResult_.totalSteps)
+                .arg(lastAiResult_.score, 0, 'f', 3)
                 .arg(lastAiResult_.collectedCoins)
-                .arg(lastAiResult_.triggeredTraps),
-            8000);
+                .arg(lastAiResult_.triggeredTraps));
+            aiResultLabel_->setVisible(true);
+            statusBar()->showMessage(
+                QStringLiteral("AI 玩家完成：score=%1, 步数=%2, 金币=%3, 陷阱=%4")
+                    .arg(lastAiResult_.score, 0, 'f', 2)
+                    .arg(lastAiResult_.totalSteps)
+                    .arg(lastAiResult_.collectedCoins)
+                    .arg(lastAiResult_.triggeredTraps),
+                8000);
+        }
+        worker->deleteLater();
+        thread->deleteLater();
     });
 
     aiWorker_ = worker;
@@ -1009,12 +1030,10 @@ void MainWindow::runOptimizer() {
     cfg.populationSize = optPopSpin_->value();
     cfg.generations = optGenSpin_->value();
     cfg.mutationRate = optMutSpin_->value() / 100.0;
-    cfg.coinCount = coinSpin_->value();
-    cfg.trapCount = trapSpin_->value();
+    const int cells = cfg.rows * cfg.columns;
+    cfg.coinCount = autoCoinCount(cells);
+    cfg.trapCount = autoTrapCount(cells);
     cfg.seed = static_cast<quint32>(seedSpin_->value());
-    cfg.enableRL = optRLCheck_->isChecked();
-    cfg.rlEpisodes = optRLEpisodesSpin_->value();
-    cfg.rlTopK = optRLTopKSpin_->value();
     cfg.useMixedAlgorithms = true;
     cfg.useAdversarialPlacement = optAdversarialCheck_->isChecked();
     cfg.useSmartPlacement = !cfg.useAdversarialPlacement;
@@ -1024,6 +1043,7 @@ void MainWindow::runOptimizer() {
     optRunButton_->setEnabled(false);
     optStopButton_->setEnabled(true);
     optApplyButton_->setEnabled(false);
+    optCompareButton_->setEnabled(false);
     optResultLabel_->setVisible(false);
     optProgressLabel_->setText(QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
 
@@ -1063,6 +1083,7 @@ void MainWindow::runOptimizer() {
                 optStopButton_->setEnabled(false);
                 optApplyButton_->setEnabled(true);
                 optSaveButton_->setEnabled(true);
+                optCompareButton_->setEnabled(true);
 
                 ResourcePlan dp = optimizedMaze_.optimalResourceWalk();
                 int worstGreedy = std::numeric_limits<int>::max();
@@ -1099,12 +1120,9 @@ void MainWindow::runOptimizer() {
                         .arg(stats.junctions));
                 optTopoLabel_->setVisible(true);
 
-                disconnect(optimizer, &MazeOptimizer::finished, nullptr, nullptr);
-                disconnect(optimizer, &MazeOptimizer::generationFinished, nullptr, nullptr);
-                thread->quit();
-                thread->wait();
-                delete optimizer;
-                delete thread;
+                // Async cleanup — never block the main thread.
+                optimizer->deleteLater();
+                thread->deleteLater();
                 optimizer_ = nullptr;
                 optimizerThread_ = nullptr;
             });

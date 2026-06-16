@@ -66,32 +66,6 @@ MazeModel MazeOptimizer::run() {
 
         population = nextGen;
 
-        if (config_.enableRL) {
-            std::sort(population.begin(), population.end(),
-                      [](const Chromosome &a, const Chromosome &b) {
-                          return a.fitness > b.fitness;
-                      });
-
-            QLearningConfig rlConfig;
-            rlConfig.episodes = config_.rlEpisodes;
-            rlConfig.refineSteps = config_.rlRefineSteps;
-            rlConfig.seed = static_cast<quint32>(config_.seed + gen * 1000);
-            QLearningOptimizer qlearner(rlConfig);
-
-            QVector<MazeModel> topMazes;
-            const int k = std::min(config_.rlTopK, static_cast<int>(population.size()));
-            for (int i = 0; i < k; ++i) {
-                topMazes.append(population[i].maze);
-            }
-
-            qlearner.train(topMazes);
-
-            for (int i = 0; i < k; ++i) {
-                population[i].maze = topMazes[i];
-                evaluateFitness(population[i]);
-            }
-        }
-
         const Chromosome &genBest = *std::max_element(
             population.begin(), population.end(),
             [](const Chromosome &a, const Chromosome &b) {
@@ -116,7 +90,6 @@ MazeModel MazeOptimizer::run() {
         }
         stats.avgFitness = sumFitness / population.size();
         stats.worstFitness = worstFitness;
-        stats.rlUsed = config_.enableRL;
 
         emit generationFinished(stats);
     }
@@ -140,7 +113,13 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
         ? algorithmForIndex(index)
         : config_.baseAlgorithm;
     chrom.maze.generate(config_.rows, config_.columns, algo, seed);
-    if (config_.useSmartPlacement) {
+    if (config_.useAdversarialPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = seed + 1000;
+        ResourcePlacer::placeAdversarial(chrom.maze, pc);
+    } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
@@ -155,11 +134,12 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
 double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
     if (config_.useEnhancedFitness) {
         EvaluatorConfig ec;
+        // Use the same placement mode for the fitness formula, but
+        // skip actual re-placement (chromosome resources are already set
+        // by randomChromosome / mutate, matching config_.useAdversarialPlacement).
         ec.useAdversarialPlacement = config_.useAdversarialPlacement;
-        ec.useSmartPlacement = !config_.useAdversarialPlacement && config_.useSmartPlacement;
-        ec.placerConfig.coinCount = config_.coinCount;
-        ec.placerConfig.trapCount = config_.trapCount;
-        ec.placerConfig.seed = rng_();
+        ec.useSmartPlacement = false;
+        ec.skipPlacement = true;
         ec.topoWeight = config_.topoWeight;
         EvalResult eval = MazeEvaluator::evaluate(chrom.maze, ec);
         chrom.dpScore = eval.dpScore;
@@ -247,7 +227,13 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
 
     Chromosome child;
     child.maze.setFromEdges(config_.rows, config_.columns, childEdges, rng_());
-    if (config_.useSmartPlacement) {
+    if (config_.useAdversarialPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = rng_();
+        ResourcePlacer::placeAdversarial(child.maze, pc);
+    } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
@@ -268,7 +254,13 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
             ? algorithmForIndex(static_cast<int>(rng_() % 4))
             : config_.baseAlgorithm;
         chrom.maze.generate(config_.rows, config_.columns, algo, newSeed);
-        if (config_.useSmartPlacement) {
+        if (config_.useAdversarialPlacement) {
+            ResourcePlacerConfig pc;
+            pc.coinCount = config_.coinCount;
+            pc.trapCount = config_.trapCount;
+            pc.seed = newSeed + 1000;
+            ResourcePlacer::placeAdversarial(chrom.maze, pc);
+        } else if (config_.useSmartPlacement) {
             ResourcePlacerConfig pc;
             pc.coinCount = config_.coinCount;
             pc.trapCount = config_.trapCount;
@@ -358,7 +350,13 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
     }
 
     chrom.maze.setFromEdges(rows, cols, newEdges, rng_());
-    if (config_.useSmartPlacement) {
+    if (config_.useAdversarialPlacement) {
+        ResourcePlacerConfig pc;
+        pc.coinCount = config_.coinCount;
+        pc.trapCount = config_.trapCount;
+        pc.seed = rng_();
+        ResourcePlacer::placeAdversarial(chrom.maze, pc);
+    } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;

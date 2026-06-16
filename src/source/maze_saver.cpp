@@ -118,7 +118,6 @@ bool MazeSaver::saveCoEvolResult(const QString &path,
     cfgObj["gaPopulation"] = config.gaPopulation;
     cfgObj["gaMutationRate"] = config.gaMutationRate;
     cfgObj["rlTrainEpisodes"] = config.rlTrainEpisodes;
-    cfgObj["rlTopK"] = config.rlTopK;
     cfgObj["mazeRows"] = config.mazeRows;
     cfgObj["mazeCols"] = config.mazeCols;
     cfgObj["baseSeed"] = static_cast<qint64>(config.baseSeed);
@@ -171,9 +170,6 @@ bool MazeSaver::saveGAResult(const QString &path,
     cfgObj["coinCount"] = config.coinCount;
     cfgObj["trapCount"] = config.trapCount;
     cfgObj["seed"] = static_cast<qint64>(config.seed);
-    cfgObj["enableRL"] = config.enableRL;
-    cfgObj["rlEpisodes"] = config.rlEpisodes;
-    cfgObj["rlTopK"] = config.rlTopK;
     json["config"] = cfgObj;
 
     json["bestMaze"] = mazeToJson(maze, "ga-best", "ga",
