@@ -83,7 +83,6 @@ standalone_cpp_submissions/   ← 纯 C++ 控制台提交版
 | [`docs/PROJ_GUIDE.md`](docs/PROJ_GUIDE.md) | **项目交接指南** — 筛查/检查/强化方向 |
 | [`docs/PROJECT_WORKFLOW.md`](docs/PROJECT_WORKFLOW.md) | **项目运转流程** — 架构/线程/数据流全解 |
 | [`docs/优化策略说明.md`](docs/优化策略说明.md) | **优化策略** — GA/适应度/协同进化 |
-| [`AGENTS.md`](AGENTS.md) | AI Agent 配置（代码约定/线程模型） |
 | [`docs/任务设计书.md`](docs/任务设计书.md) | 课设任务规范 |
 | [`docs/课程设计说明.md`](docs/课程设计说明.md) | 算法原理与复杂度分析 |
 | [`docs/验收对照清单.md`](docs/验收对照清单.md) | 助教验收对照项 |

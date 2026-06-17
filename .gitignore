@@ -47,6 +47,10 @@ Thumbs.db
 # Tool
 .mimocode/
 
+# Agent config (local only)
+AGENTS.md
+CLAUDE.md
+
 # Generated output
 optimizer_result.json
 logs/
