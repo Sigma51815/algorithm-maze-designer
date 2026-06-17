@@ -171,7 +171,9 @@ src/
 
 | 文件 | 内容 |
 |------|------|
-| `PROJ_GUIDE.md` | **项目交接指南**（组长端 AI Agent 入口）— 筛查/检查/强化方向 |
+| `docs/PROJ_GUIDE.md` | **项目交接指南**（组长端 AI Agent 入口）— 筛查/检查/强化方向 |
+| `docs/PROJECT_WORKFLOW.md` | 项目运转流程 — 架构/线程/数据流 |
+| `docs/优化策略说明.md` | 优化策略 — GA/适应度/协同进化 |
 | `docs/任务设计书.md` | 任务规范、评分标准 |
 | `docs/方案设计思路/方案甲_迷宫设计.md` | 迷宫设计方案 + PAIRED/GA 优化 + 边界压榨策略 |
 | `docs/方案设计思路/方案乙_AI玩家.md` | AI 玩家方案：贪心 / Q-Learning / DRQN |
@@ -180,9 +182,9 @@ src/
 
 ## 已知问题
 
-- RL 自测偶尔 flaky（~20% 失败率）— 详见 `PROJ_GUIDE.md` 第五节 RL-1~RL-4
+- RL 自测偶尔 flaky（~20% 失败率）— 详见 `docs/PROJ_GUIDE.md` 第五节 RL-1~RL-4
 - `minRouds` JSON key 拼写错误（应为 minRounds）— 保持兼容不改
-- 更多待处理问题见 `PROJ_GUIDE.md` 第五~七节
+- 更多待处理问题见 `docs/PROJ_GUIDE.md` 第五~七节
 
 ## 后续发展方向
 
