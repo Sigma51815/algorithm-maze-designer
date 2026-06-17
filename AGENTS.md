@@ -177,13 +177,10 @@ src/
 | `docs/方案设计思路/方案乙_AI玩家.md` | AI 玩家方案：贪心 / Q-Learning / DRQN |
 | `docs/方案设计思路/OPTIMIZER_GUIDE.md` | 优化器使用指南 |
 | `docs/输入输出说明/input说明.txt` | 交叉测试 JSON 格式规范 |
-| `docs/QA_CHECKLIST.md` | QA 验收检查清单 |
-| `docs/QA_HANDOFF_REPORT.md` | 三轮 QA 审查最终交接报告（14 项已修复 + 30 项待处理） |
-| `docs/BUG_ANALYSIS.md` | 原始 bug 分析（GA 优化后 AI 分数变高） |
 
 ## 已知问题
 
-- RL 自测偶尔 flaky（~20% 失败率）— 详见 `docs/QA_HANDOFF_REPORT.md` RL-1~RL-4
+- RL 自测偶尔 flaky（~20% 失败率）— 详见 `PROJ_GUIDE.md` 第五节 RL-1~RL-4
 - `minRouds` JSON key 拼写错误（应为 minRounds）— 保持兼容不改
 - 更多待处理问题见 `PROJ_GUIDE.md` 第五~七节
 
@@ -192,6 +189,9 @@ src/
 1. **微调**：RL 状态编码优化（当前对角线浪费 99.6% Q 表）、奖励函数调优
 2. **Qt 可视化**：迷宫难度热力图、AI 路径对比面板、优化过程实时图表
 3. **系统稳定性**：反复点击各种按钮的压力测试、长时间运行的内存泄漏检查
+4. **Code simplifier**：资源放置模式提取为 helper（8 处重复）、mutate/edgeSwap 去重、crossover 去重
+5. **注释补充**：核心算法添加中文注释
+6. **原理讲解**：PAIRED 框架、边界压榨策略、协同进化的文档化
 4. **Code simplifier**：资源放置模式提取为 helper（8 处重复）、mutate/edgeSwap 去重、crossover 去重
 5. **注释补充**：核心算法添加中文注释
 6. **原理讲解**：PAIRED 框架、边界压榨策略、协同进化的文档化

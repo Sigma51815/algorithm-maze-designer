@@ -188,18 +188,15 @@ src/
 
 ---
 
-## 八、关键文档索引
+## 八、课程文档索引
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
-| QA 检查清单 | `docs/QA_CHECKLIST.md` | 逐项验收标准 |
-| QA 第一轮报告 | `docs/QA_REVIEW_REPORT.md` | 对照清单的首次审查 |
-| QA 第二轮报告 | `docs/QA_REVIEW_ROUND2.md` | 已修复代码边缘 + UI/内存 |
-| QA 最终交接报告 | `docs/QA_HANDOFF_REPORT.md` | 13 项已修复 + 30 项待处理 |
-| Bug 分析 | `docs/BUG_ANALYSIS.md` | 原始 bug 分析（GA 优化后 AI 分数变高） |
 | 任务设计书 | `docs/任务设计书.md` | 课设评分标准 |
-| 迷宫设计方案 | `docs/方案设计思路/方案甲_迷宫设计.md` | PAIRED/GA 设计 |
+| 课程设计说明 | `docs/课程设计说明.md` | 课程整体设计思路 |
+| 验收对照清单 | `docs/验收对照清单.md` | 助教验收对照项 |
+| AI 玩家接口说明 | `docs/AI玩家接口说明.md` | 交叉测试 JSON 接口 |
+| 迷宫设计方案 | `docs/方案设计思路/方案甲_迷宫设计.md` | PAIRED/GA 优化设计 |
 | AI 玩家方案 | `docs/方案设计思路/方案乙_AI玩家.md` | 贪心/RL/DRQN 设计 |
 | 优化器指南 | `docs/方案设计思路/OPTIMIZER_GUIDE.md` | 无头优化器使用 |
 | 输入说明 | `docs/输入输出说明/input说明.txt` | 交叉测试 JSON 格式 |
-| 验收手册 | `docs/输入输出说明/助教验收与评分操作手册.html` | 助教评分标准 |
