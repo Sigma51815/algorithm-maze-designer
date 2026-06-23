@@ -117,16 +117,21 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = seed + 1000;
         ResourcePlacer::placeAdversarial(chrom.maze, pc);
     } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = seed + 1000;
         ResourcePlacer::placeSmart(chrom.maze, pc);
     } else {
-        chrom.maze.placeResources(config_.coinCount, config_.trapCount, seed + 1000);
+        chrom.maze.placeResources(config_.coinCount, config_.trapCount, seed + 1000,
+                                  config_.coinValue, config_.trapValue);
     }
     return chrom;
 }
@@ -231,16 +236,21 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = rng_();
         ResourcePlacer::placeAdversarial(child.maze, pc);
     } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = rng_();
         ResourcePlacer::placeSmart(child.maze, pc);
     } else {
-        child.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+        child.maze.placeResources(config_.coinCount, config_.trapCount, rng_(),
+                                  config_.coinValue, config_.trapValue);
     }
     return child;
 }
@@ -258,16 +268,21 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
             ResourcePlacerConfig pc;
             pc.coinCount = config_.coinCount;
             pc.trapCount = config_.trapCount;
+            pc.coinValue = config_.coinValue;
+            pc.trapValue = config_.trapValue;
             pc.seed = newSeed + 1000;
             ResourcePlacer::placeAdversarial(chrom.maze, pc);
         } else if (config_.useSmartPlacement) {
             ResourcePlacerConfig pc;
             pc.coinCount = config_.coinCount;
             pc.trapCount = config_.trapCount;
+            pc.coinValue = config_.coinValue;
+            pc.trapValue = config_.trapValue;
             pc.seed = newSeed + 1000;
             ResourcePlacer::placeSmart(chrom.maze, pc);
         } else {
-            chrom.maze.placeResources(config_.coinCount, config_.trapCount, newSeed + 1000);
+            chrom.maze.placeResources(config_.coinCount, config_.trapCount, newSeed + 1000,
+                                      config_.coinValue, config_.trapValue);
         }
         return;
     }
@@ -354,16 +369,21 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = rng_();
         ResourcePlacer::placeAdversarial(chrom.maze, pc);
     } else if (config_.useSmartPlacement) {
         ResourcePlacerConfig pc;
         pc.coinCount = config_.coinCount;
         pc.trapCount = config_.trapCount;
+        pc.coinValue = config_.coinValue;
+        pc.trapValue = config_.trapValue;
         pc.seed = rng_();
         ResourcePlacer::placeSmart(chrom.maze, pc);
     } else {
-        chrom.maze.placeResources(config_.coinCount, config_.trapCount, rng_());
+        chrom.maze.placeResources(config_.coinCount, config_.trapCount, rng_(),
+                                  config_.coinValue, config_.trapValue);
     }
 }
 

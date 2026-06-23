@@ -373,7 +373,8 @@ QVector<int> MazeModel::neighbors(int cell) const {
     return result;
 }
 
-void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
+void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed,
+                               int coinValue, int trapValue) {
     if (cellCount() <= 2) {
         return;
     }
@@ -420,7 +421,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     const int mainPathTrapCount = std::min(
         static_cast<int>(mainPathCells.size()), (trapCount + 2) / 3);
     for (int i = 0; i < mainPathTrapCount; ++i) {
-        resources_[mainPathCells[i]] = -30;
+        resources_[mainPathCells[i]] = trapValue;
     }
 
     QVector<int> remaining;
@@ -432,7 +433,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     const int remainingTraps = std::min(trapCount - mainPathTrapCount,
                                          static_cast<int>(remaining.size()));
     for (int i = 0; i < remainingTraps; ++i) {
-        resources_[remaining.takeLast()] = -30;
+        resources_[remaining.takeLast()] = trapValue;
     }
 
     QVector<int> coinCandidates;
@@ -450,7 +451,7 @@ void MazeModel::placeResources(int coinCount, int trapCount, quint32 seed) {
     // Shuffle so coins don't deterministically favor branch cells over main-path cells.
     std::shuffle(coinCandidates.begin(), coinCandidates.end(), std::mt19937{static_cast<unsigned>(seed + 3)});
     for (int i = 0; i < coinCount; ++i) {
-        resources_[coinCandidates[i]] = 50;
+        resources_[coinCandidates[i]] = coinValue;
     }
 }
 
@@ -706,6 +707,7 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
     for (int cell : backbone) {
         onBackbone[cell] = true;
     }
+    result.backboneCells = backbone;
 
     QVector<int> gain(cellCount(), 0);
     std::function<int(int, int)> calculateGain = [&](int cell, int from) {
@@ -725,6 +727,37 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
             if (!onBackbone[next]) {
                 calculateGain(next, cell);
             }
+        }
+    }
+
+    auto collectBranchCells = [&](int root, int from) {
+        QVector<int> cells;
+        std::function<void(int, int)> visit = [&](int cell, int parentCell) {
+            cells.append(cell);
+            for (int next : neighbors(cell)) {
+                if (next == parentCell || onBackbone[next]) {
+                    continue;
+                }
+                visit(next, cell);
+            }
+        };
+        visit(root, from);
+        std::sort(cells.begin(), cells.end());
+        return cells;
+    };
+
+    for (int cell : backbone) {
+        for (int next : neighbors(cell)) {
+            if (onBackbone[next]) {
+                continue;
+            }
+            ResourceBranchDecision decision;
+            decision.attachCell = cell;
+            decision.rootCell = next;
+            decision.gain = gain[next];
+            decision.selected = gain[next] > 0;
+            decision.cells = collectBranchCells(next, cell);
+            result.branchDecisions.append(decision);
         }
     }
 
@@ -751,8 +784,15 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
     }
 
     QSet<int> collected;
+    int cumulative = 0;
     for (int cell : result.walk) {
-        collected.insert(cell);
+        if (!collected.contains(cell)) {
+            collected.insert(cell);
+            if (cell != startCell() && cell != endCell()) {
+                cumulative += resourceAt(cell);
+            }
+        }
+        result.cumulativeValues.append(cumulative);
     }
     result.collectedCells = collected.values();
     std::sort(result.collectedCells.begin(), result.collectedCells.end());

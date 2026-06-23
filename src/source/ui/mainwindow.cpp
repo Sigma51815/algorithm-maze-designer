@@ -12,6 +12,7 @@
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -24,6 +25,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QScrollArea>
+#include <QSet>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
@@ -34,6 +36,118 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+
+namespace {
+
+QString formatMatrixPathWithoutEndpoints(const MazeModel &maze, const QVector<int> &walk) {
+    QStringList points;
+    points.reserve(walk.size());
+    for (int cell : walk) {
+        if (cell == maze.startCell() || cell == maze.endCell()) {
+            continue;
+        }
+        const int matrixRow = (cell / maze.columns()) * 2 + 1;
+        const int matrixColumn = (cell % maze.columns()) * 2 + 1;
+        points.append(QStringLiteral("(%1,%2)").arg(matrixRow).arg(matrixColumn));
+    }
+    return points.isEmpty() ? QStringLiteral("无") : points.join(QStringLiteral(" → "));
+}
+
+QString formatCellCoord(const MazeModel &maze, int cell) {
+    if (cell < 0 || maze.columns() <= 0) return QStringLiteral("(-,-)");
+    const int matrixRow = (cell / maze.columns()) * 2 + 1;
+    const int matrixColumn = (cell % maze.columns()) * 2 + 1;
+    return QStringLiteral("(%1,%2)").arg(matrixRow).arg(matrixColumn);
+}
+
+QString formatCellList(const MazeModel &maze, const QVector<int> &cells, int limit = 18) {
+    QStringList parts;
+    const int n = std::min(limit, static_cast<int>(cells.size()));
+    for (int i = 0; i < n; ++i) {
+        parts.append(formatCellCoord(maze, cells[i]));
+    }
+    if (cells.size() > limit) {
+        parts.append(QStringLiteral("...共%1格").arg(cells.size()));
+    }
+    return parts.isEmpty() ? QStringLiteral("无") : parts.join(QStringLiteral(" -> "));
+}
+
+int countCellsWithoutEndpoints(const MazeModel &maze, const QVector<int> &cells) {
+    int count = 0;
+    for (int cell : cells) {
+        if (cell != maze.startCell() && cell != maze.endCell()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+QString buildDpProcessReport(const MazeModel &maze, const ResourcePlan &plan) {
+    QStringList selected;
+    QStringList rejected;
+    int selectedGain = 0;
+    int rejectedCount = 0;
+    for (const ResourceBranchDecision &decision : plan.branchDecisions) {
+        const QString line = QStringLiteral("%1 接入 %2，收益 %3，覆盖 %4 格")
+            .arg(formatCellCoord(maze, decision.attachCell))
+            .arg(formatCellCoord(maze, decision.rootCell))
+            .arg(decision.gain)
+            .arg(decision.cells.size());
+        if (decision.selected) {
+            selected.append(line);
+            selectedGain += decision.gain;
+        } else {
+            ++rejectedCount;
+            if (rejected.size() < 8) {
+                rejected.append(line);
+            }
+        }
+    }
+
+    QStringList cumulative;
+    const int stride = std::max(1, static_cast<int>(plan.walk.size()) / 12);
+    for (int i = 0; i < plan.walk.size() && i < plan.cumulativeValues.size(); i += stride) {
+        cumulative.append(QStringLiteral("步%1 %2 累计=%3")
+            .arg(i)
+            .arg(formatCellCoord(maze, plan.walk[i]))
+            .arg(plan.cumulativeValues[i]));
+    }
+    if (!plan.walk.isEmpty() && !plan.cumulativeValues.isEmpty()
+        && (cumulative.isEmpty() || !cumulative.last().startsWith(
+            QStringLiteral("步%1 ").arg(plan.walk.size() - 1)))) {
+        cumulative.append(QStringLiteral("步%1 %2 累计=%3")
+            .arg(plan.walk.size() - 1)
+            .arg(formatCellCoord(maze, plan.walk.last()))
+            .arg(plan.cumulativeValues.last()));
+    }
+
+    QString report;
+    report += QStringLiteral("DP过程说明\n");
+    report += QStringLiteral("1. 先取 S 到 E 的主路径作为必须经过的骨架。\n");
+    report += QStringLiteral("   主路径：%1\n").arg(formatCellList(maze, plan.backboneCells));
+    report += QStringLiteral("2. 对主路径两侧每棵分支树自底向上计算收益 gain(cell)。\n");
+    report += QStringLiteral("   规则：gain = 当前资源值 + 子分支 max(0, gain)，收益 <= 0 的分支不进入最优路线。\n");
+    report += QStringLiteral("3. 被选分支：%1 个，分支收益合计 %2。\n")
+        .arg(selected.size()).arg(selectedGain);
+    for (const QString &line : selected.mid(0, 12)) {
+        report += QStringLiteral("   + %1\n").arg(line);
+    }
+    if (selected.size() > 12) {
+        report += QStringLiteral("   ... 另有 %1 个正收益分支\n").arg(selected.size() - 12);
+    }
+    report += QStringLiteral("4. 放弃分支：%1 个（非正收益，避免绕路踩陷阱或低收益）。\n").arg(rejectedCount);
+    for (const QString &line : rejected) {
+        report += QStringLiteral("   - %1\n").arg(line);
+    }
+    report += QStringLiteral("5. 路径累计资源：\n");
+    for (const QString &line : cumulative) {
+        report += QStringLiteral("   %1\n").arg(line);
+    }
+    report += QStringLiteral("最终最大资源 = %1").arg(plan.maxValue);
+    return report;
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     buildUi();
@@ -155,7 +269,6 @@ void MainWindow::buildUi() {
 
     generateButton_ = new QPushButton(QStringLiteral("生成并可视化迷宫"));
     generateButton_->setObjectName(QStringLiteral("primaryButton"));
-    leftPanel->addWidget(generateButton_);
     topRow->addLayout(leftPanel);
 
     // Right panel — optimization
@@ -196,6 +309,53 @@ void MainWindow::buildUi() {
     topRow->addLayout(rightPanel);
     generationOuter->addLayout(topRow);
 
+    // Resource placement belongs to maze generation; DP below only solves the chosen layout.
+    auto *resourceConfig = new QGridLayout;
+    resourceConfig->setHorizontalSpacing(8);
+    resourceConfig->setVerticalSpacing(6);
+    coinSpin_ = new QSpinBox;
+    coinSpin_->setObjectName(QStringLiteral("inputControl"));
+    coinSpin_->setRange(0, 300);
+    coinSpin_->setValue(8);
+    trapSpin_ = new QSpinBox;
+    trapSpin_->setObjectName(QStringLiteral("inputControl"));
+    trapSpin_->setRange(0, 300);
+    trapSpin_->setValue(6);
+    coinValueSpin_ = new QSpinBox;
+    coinValueSpin_->setObjectName(QStringLiteral("inputControl"));
+    coinValueSpin_->setRange(1, 9999);
+    coinValueSpin_->setValue(50);
+    trapValueSpin_ = new QSpinBox;
+    trapValueSpin_->setObjectName(QStringLiteral("inputControl"));
+    trapValueSpin_->setRange(1, 9999);
+    trapValueSpin_->setValue(30);
+
+    resourceConfig->addWidget(new QLabel(QStringLiteral("金币数量")), 0, 0);
+    resourceConfig->addWidget(coinSpin_, 0, 1);
+    resourceConfig->addWidget(new QLabel(QStringLiteral("陷阱数量")), 0, 2);
+    resourceConfig->addWidget(trapSpin_, 0, 3);
+    resourceConfig->addWidget(new QLabel(QStringLiteral("金币价值")), 1, 0);
+    resourceConfig->addWidget(coinValueSpin_, 1, 1);
+    resourceConfig->addWidget(new QLabel(QStringLiteral("陷阱扣分")), 1, 2);
+    resourceConfig->addWidget(trapValueSpin_, 1, 3);
+    resourceConfig->setColumnStretch(1, 1);
+    resourceConfig->setColumnStretch(3, 1);
+    generationOuter->addLayout(resourceConfig);
+
+    generationOuter->addWidget(generateButton_);
+
+    auto updateLegend = [legend, this]() {
+        legend->setText(QStringLiteral(
+            "S 起点   B BOSS   E 终点   ● 金币(+%1)   ▲ 陷阱(-%2)")
+            .arg(coinValueSpin_->value())
+            .arg(trapValueSpin_->value()));
+    };
+    connect(coinValueSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, updateLegend);
+    connect(trapValueSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, updateLegend);
+    updateLegend();
+
     // ── bottom: results ──
     validationLabel_ = new QLabel;
     validationLabel_->setObjectName(QStringLiteral("resultLabel"));
@@ -207,7 +367,7 @@ void MainWindow::buildUi() {
     complexityLabel->setWordWrap(true);
     generationOuter->addWidget(complexityLabel);
 
-    optProgressLabel_ = new QLabel(QStringLiteral("GA 适应度 = coinMiss*50 + trapHit*30 + pathIneff*20 + topo"));
+    optProgressLabel_ = new QLabel(QStringLiteral("GA 目标 = 迷宫组代理分（区分度D × 稳定性C × 均衡性B）"));
     optProgressLabel_->setObjectName(QStringLiteral("infoCard"));
     optProgressLabel_->setWordWrap(true);
     generationOuter->addWidget(optProgressLabel_);
@@ -266,42 +426,20 @@ void MainWindow::buildUi() {
     resourceGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *resourceLayout = new QVBoxLayout(resourceGroup);
     resourceLayout->setSpacing(8);
-    auto *resourceForm = new QFormLayout;
-    resourceForm->setSpacing(6);
-    resourceForm->setLabelAlignment(Qt::AlignRight);
-    // Resource counts default to auto-derived values (editable, with reset).
-    coinSpin_ = new QSpinBox;
-    coinSpin_->setObjectName(QStringLiteral("inputControl"));
-    coinSpin_->setRange(0, 300); coinSpin_->setValue(8);
-    trapSpin_ = new QSpinBox;
-    trapSpin_->setObjectName(QStringLiteral("inputControl"));
-    trapSpin_->setRange(0, 300); trapSpin_->setValue(6);
-    {
-        auto *coinTrapRow = new QHBoxLayout;
-        coinTrapRow->setSpacing(6);
-        coinTrapRow->addWidget(new QLabel(QStringLiteral("金币")));
-        coinTrapRow->addWidget(coinSpin_);
-        coinTrapRow->addWidget(new QLabel(QStringLiteral("陷阱")));
-        coinTrapRow->addWidget(trapSpin_);
-        resourceForm->addRow(coinTrapRow);
-    }
-    resourceLayout->addLayout(resourceForm);
-    auto *resourceButtons = new QHBoxLayout;
-    resourceButtons->setSpacing(8);
-    auto *placeButton = new QPushButton(QStringLiteral("重新布置"));
-    placeButton->setObjectName(QStringLiteral("secondaryButton"));
     auto *solveResourceButton = new QPushButton(QStringLiteral("DP 求最优路径"));
     solveResourceButton->setObjectName(QStringLiteral("primaryButton"));
-    resourceButtons->addWidget(placeButton);
-    resourceButtons->addWidget(solveResourceButton);
-    resourceLayout->addLayout(resourceButtons);
-    // "重新布置" already re-places with current spin values; no separate reset needed.
+    resourceLayout->addWidget(solveResourceButton);
     resourceResultLabel_ = new QLabel(QStringLiteral("尚未求解"));
     resourceResultLabel_->setObjectName(QStringLiteral("resultLabel"));
     resourceResultLabel_->setWordWrap(true);
     resourceLayout->addWidget(resourceResultLabel_);
+    resourceProcessOutput_ = new QPlainTextEdit;
+    resourceProcessOutput_->setObjectName(QStringLiteral("outputConsole"));
+    resourceProcessOutput_->setReadOnly(true);
+    resourceProcessOutput_->setMaximumHeight(180);
+    resourceProcessOutput_->setPlaceholderText(QStringLiteral("点击「DP 求最优路径」查看主路径、分支收益和累计资源过程"));
+    resourceLayout->addWidget(resourceProcessOutput_);
     panelLayout->addWidget(resourceGroup);
-    connect(placeButton, &QPushButton::clicked, this, &MainWindow::placeResources);
     connect(solveResourceButton, &QPushButton::clicked, this, &MainWindow::solveResources);
 
     panelLayout->addWidget(makeSeparator());
@@ -545,14 +683,13 @@ void MainWindow::generateMaze() {
     columnsSpin_->setValue(matrixColumns);
     maze_.generate((matrixRows - 1) / 2, (matrixColumns - 1) / 2, algorithm,
                    static_cast<quint32>(seedSpin_->value()));
-    const int cells = maze_.cellCount();
-    coinSpin_->setValue(autoCoinCount(cells));
-    trapSpin_->setValue(autoTrapCount(cells));
     maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
-                         static_cast<quint32>(seedSpin_->value() + 1));
+                         static_cast<quint32>(seedSpin_->value() + 1),
+                         coinValueSpin_->value(), -trapValueSpin_->value());
     lastPlan_ = {};
     lastBossResult_ = {};
     resourceResultLabel_->setText(QStringLiteral("尚未求解"));
+    if (resourceProcessOutput_) resourceProcessOutput_->clear();
     mazeWidget_->setMaze(maze_);
     revealedEdges_ = 0;
     mazeWidget_->setRevealCount(0);
@@ -568,21 +705,6 @@ void MainWindow::generateMaze() {
     ++generationId_;   // bump so any in-flight GA callback can detect staleness
 }
 
-void MainWindow::placeResources() {
-    if (maze_.cellCount() == 0) {
-        return;
-    }
-    pathTimer_->stop();
-    const int cells = maze_.cellCount();
-    coinSpin_->setValue(autoCoinCount(cells));
-    trapSpin_->setValue(autoTrapCount(cells));
-    maze_.placeResources(coinSpin_->value(), trapSpin_->value(),
-                         static_cast<quint32>(seedSpin_->value() + 1));
-    lastPlan_ = {};
-    resourceResultLabel_->setText(QStringLiteral("资源已重新布置，等待 DP 求解"));
-    mazeWidget_->setMaze(maze_);
-}
-
 void MainWindow::solveResources() {
     if (maze_.cellCount() == 0) {
         return;
@@ -590,12 +712,38 @@ void MainWindow::solveResources() {
     generationTimer_->stop();
     mazeWidget_->setRevealCount(maze_.generationSteps().size());
     lastPlan_ = maze_.optimalResourceWalk();
+    const QString pathText = formatMatrixPathWithoutEndpoints(maze_, lastPlan_.walk);
+    const int collectedCells = countCellsWithoutEndpoints(maze_, lastPlan_.collectedCells);
+    QVector<int> selectedBranchCells;
+    QVector<int> rejectedBranchRoots;
+    QSet<int> selectedSet;
+    for (const ResourceBranchDecision &decision : lastPlan_.branchDecisions) {
+        if (decision.selected) {
+            for (int cell : decision.cells) {
+                if (!selectedSet.contains(cell)) {
+                    selectedSet.insert(cell);
+                    selectedBranchCells.append(cell);
+                }
+            }
+        } else {
+            rejectedBranchRoots.append(decision.rootCell);
+        }
+    }
     resourceResultLabel_->setText(
         QStringLiteral("<b>最多资源：%1</b>  |  行走 %2 步  |  首经 %3 格<br/>"
+                       "<span style='color:#7c2d12;font-size:11px'>"
+                       "最优路径（矩阵坐标，不含起点和终点）：%4</span><br/>"
                        "<span style='color:#94a3b8;font-size:11px'>路径允许回访，金币/陷阱只计一次</span>")
             .arg(lastPlan_.maxValue)
             .arg(std::max(0, static_cast<int>(lastPlan_.walk.size()) - 1))
-            .arg(lastPlan_.collectedCells.size()));
+            .arg(collectedCells)
+            .arg(pathText));
+    if (resourceProcessOutput_) {
+        resourceProcessOutput_->setPlainText(buildDpProcessReport(maze_, lastPlan_));
+    }
+    mazeWidget_->setDpProcessHighlights(lastPlan_.backboneCells,
+                                        selectedBranchCells,
+                                        rejectedBranchRoots);
     revealedPathPoints_ = 1;
     mazeWidget_->setSolutionPath(lastPlan_.walk, revealedPathPoints_);
     pathTimer_->start();
@@ -812,6 +960,7 @@ void MainWindow::loadMaze() {
     mazeWidget_->clearSolutionPath();
     if (aiStatusLabel_) aiStatusLabel_->setVisible(false);
     resourceResultLabel_->setText(QStringLiteral("尚未求解"));
+    if (resourceProcessOutput_) resourceProcessOutput_->clear();
 
     rowsSpin_->setValue(maze_.rows() * 2 + 1);
     columnsSpin_->setValue(maze_.columns() * 2 + 1);
@@ -1004,6 +1153,8 @@ void MainWindow::runOptimizer() {
     cfg.mutationRate = optMutSpin_->value() / 100.0;
     cfg.coinCount = coinSpin_->value();
     cfg.trapCount = trapSpin_->value();
+    cfg.coinValue = coinValueSpin_->value();
+    cfg.trapValue = -trapValueSpin_->value();
     cfg.seed = static_cast<quint32>(seedSpin_->value());
     cfg.useMixedAlgorithms = false;
     cfg.baseAlgorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
@@ -1026,7 +1177,7 @@ void MainWindow::runOptimizer() {
     connect(optimizer, &MazeOptimizer::generationFinished, this,
             [this, cfg](const OptimizerStats &stats) {
                 optProgressLabel_->setText(
-                    QStringLiteral("第 %1 / %2 代  |  最优适应度 %3  |  平均 %4<br/>"
+                    QStringLiteral("第 %1 / %2 代  |  迷宫组代理分 %3  |  平均 %4<br/>"
                                    "DP最优 %5  |  Greedy %6  |  Regret %7")
                         .arg(stats.generation)
                         .arg(cfg.generations)
@@ -1075,9 +1226,6 @@ void MainWindow::runOptimizer() {
                 lastOptFitness_ = dp.maxValue - worstGreedy;
 
 
-                MazeStatistics stats = optimizedMaze_.statistics();
-                double topoDiff = MazeEvaluator::computeTopoDifficulty(optimizedMaze_);
-
                 // Auto-show comparison between pre-optimization and optimized maze.
                 if (preOptMaze_.cellCount() > 0) {
                     EvaluatorConfig ec;
@@ -1096,8 +1244,14 @@ void MainWindow::runOptimizer() {
                             "<td>%3%</td><td>%4%</td></tr>"
                         "<tr><td>路径迂回度</td>"
                             "<td>%5%</td><td>%6%</td></tr>"
-                        "<tr><td>综合难度分</td>"
-                            "<td>%7</td><td style='color:#2E7D32'><b>%8</b></td></tr>"
+                        "<tr><td>区分度 D</td>"
+                            "<td>%7</td><td>%8</td></tr>"
+                        "<tr><td>稳定性 C</td>"
+                            "<td>%9</td><td>%10</td></tr>"
+                        "<tr><td>均衡性 B</td>"
+                            "<td>%11</td><td>%12</td></tr>"
+                        "<tr><td>迷宫组代理分</td>"
+                            "<td>%13</td><td style='color:#2E7D32'><b>%14</b></td></tr>"
                         "</table>")
                         .arg(before.coinMissRate * 100, 0, 'f', 1)
                         .arg(after.coinMissRate * 100, 0, 'f', 1)
@@ -1105,12 +1259,18 @@ void MainWindow::runOptimizer() {
                         .arg(after.trapHitRate * 100, 0, 'f', 1)
                         .arg(before.pathInefficiency * 100, 0, 'f', 1)
                         .arg(after.pathInefficiency * 100, 0, 'f', 1)
+                        .arg(before.designDiscrimination, 0, 'f', 2)
+                        .arg(after.designDiscrimination, 0, 'f', 2)
+                        .arg(before.designStability, 0, 'f', 2)
+                        .arg(after.designStability, 0, 'f', 2)
+                        .arg(before.designBalance, 0, 'f', 2)
+                        .arg(after.designBalance, 0, 'f', 2)
                         .arg(before.finalFitness, 0, 'f', 1)
                         .arg(after.finalFitness, 0, 'f', 1);
                     bool improved = after.finalFitness > before.finalFitness;
                     report += improved
-                        ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（难度分提升）</b>")
-                        : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化未变难</b>");
+                        ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（迷宫组代理分提升）</b>")
+                        : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化未提升迷宫组代理分</b>");
                     optCompareLabel_->setText(report);
                     optCompareLabel_->setVisible(true);
                 }
@@ -1149,6 +1309,7 @@ void MainWindow::applyOptimizedMaze() {
     revealedAiPoints_ = 0;
 
     resourceResultLabel_->setText(QStringLiteral("已应用优化迷宫，等待 DP 求解"));
+    if (resourceProcessOutput_) resourceProcessOutput_->clear();
     mazeWidget_->setMaze(maze_);
     mazeWidget_->clearAiPath();
     if (aiStatusLabel_) aiStatusLabel_->setVisible(false);

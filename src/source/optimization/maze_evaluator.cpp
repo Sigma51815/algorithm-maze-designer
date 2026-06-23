@@ -3,7 +3,33 @@
 #include <QQueue>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+
+namespace {
+
+double clamp01(double value) {
+    return std::clamp(value, 0.0, 1.0);
+}
+
+double meanOf(const QVector<double> &values) {
+    if (values.isEmpty()) return 0.0;
+    double sum = 0.0;
+    for (double value : values) sum += value;
+    return sum / values.size();
+}
+
+double stddevOf(const QVector<double> &values, double mean) {
+    if (values.size() < 2) return 0.0;
+    double sum = 0.0;
+    for (double value : values) {
+        const double delta = value - mean;
+        sum += delta * delta;
+    }
+    return std::sqrt(sum / values.size());
+}
+
+} // namespace
 
 EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &config) {
     EvalResult result;
@@ -59,6 +85,9 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         double worstMissRate = 0.0;
         double worstHitRate = 0.0;
         double worstInefficiency = 0.0;
+        int reachedCount = 0;
+        QVector<double> aiRatios;
+        QVector<double> aiResourceRatios;
         for (GreedyStrategy s : strategies) {
             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
             if (r.remainingResource < worst) {
@@ -78,6 +107,16 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
             if (miss > worstMissRate) worstMissRate = miss;
             if (hit  > worstHitRate)  worstHitRate  = hit;
             if (ineff > worstInefficiency) worstInefficiency = ineff;
+
+            if (r.reachedEnd) ++reachedCount;
+            const double stepRatio = r.totalSteps > 0
+                ? static_cast<double>(r.remainingResource) / r.totalSteps
+                : 0.0;
+            aiRatios.append(stepRatio);
+            const double resourceRatio = result.dpScore > 0
+                ? static_cast<double>(std::max(0, r.remainingResource)) / result.dpScore
+                : 0.0;
+            aiResourceRatios.append(clamp01(resourceRatio));
         }
         result.worstGreedyScore = worst;
         result.bestGreedyScore = best;
@@ -85,6 +124,24 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         result.coinMissRate = worstMissRate;
         result.trapHitRate = worstHitRate;
         result.pathInefficiency = worstInefficiency;
+
+        const double meanRatio = meanOf(aiRatios);
+        const double ratioStddev = stddevOf(aiRatios, meanRatio);
+        const double meanResourceRatio = meanOf(aiResourceRatios);
+        const double resourceStddev = stddevOf(aiResourceRatios, meanResourceRatio);
+
+        // Cross-validation proxy for design groups:
+        // D: distinguish AI players, C: avoid pathological/no-finish maps,
+        // B: keep the maze challenging but still playable.
+        result.designDiscrimination = clamp01(resourceStddev / 0.35);
+        result.designStability = clamp01(static_cast<double>(reachedCount) / strategies.size());
+        const double targetMeanRatio = 0.45;
+        const double targetSpread = 0.18;
+        result.designBalance = clamp01(1.0
+            - std::abs(meanResourceRatio - targetMeanRatio) / targetSpread);
+        const double geometric = std::cbrt(std::max(0.0,
+            result.designDiscrimination * result.designStability * result.designBalance));
+        result.designGroupScore = 60.0 + geometric * 40.0;
     }
     result.regretGreedy = result.dpScore - result.worstGreedyScore;
 
@@ -104,11 +161,7 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 
     result.topoDifficulty = computeTopoDifficulty(maze);
 
-    // Composite difficulty score (0–100 scale) — same formula for all modes.
-    result.finalFitness = result.coinMissRate * 50.0
-                          + result.trapHitRate * 30.0
-                          + result.pathInefficiency * 20.0
-                          + config.topoWeight * result.topoDifficulty * 50.0;
+    result.finalFitness = result.designGroupScore;
 
     return result;
 }

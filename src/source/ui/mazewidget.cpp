@@ -15,6 +15,7 @@ void MazeWidget::setMaze(const MazeModel &maze) {
     hasMaze_ = maze_.cellCount() > 0;
     revealCount_ = maze_.generationSteps().size();
     clearSolutionPath();
+    clearDpProcessHighlights();
     update();
 }
 
@@ -34,6 +35,22 @@ void MazeWidget::setSolutionPath(const QVector<int> &path, int visiblePoints) {
 void MazeWidget::clearSolutionPath() {
     solutionPath_.clear();
     visiblePathPoints_ = 0;
+    update();
+}
+
+void MazeWidget::setDpProcessHighlights(const QVector<int> &backbone,
+                                        const QVector<int> &selectedBranchCells,
+                                        const QVector<int> &rejectedBranchRoots) {
+    dpBackbone_ = backbone;
+    dpSelectedBranchCells_ = selectedBranchCells;
+    dpRejectedBranchRoots_ = rejectedBranchRoots;
+    update();
+}
+
+void MazeWidget::clearDpProcessHighlights() {
+    dpBackbone_.clear();
+    dpSelectedBranchCells_.clear();
+    dpRejectedBranchRoots_.clear();
     update();
 }
 
@@ -112,6 +129,27 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     painter.drawRect(rectOf(maze_.bossCell()));
     painter.setBrush(QColor("#fde7e7"));
     painter.drawRect(rectOf(maze_.endCell()));
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 229, 153, 115));
+    for (int cell : dpBackbone_) {
+        if (cell != maze_.startCell() && cell != maze_.endCell()) {
+            painter.drawRect(rectOf(cell).adjusted(2, 2, -2, -2));
+        }
+    }
+    painter.setBrush(QColor(125, 211, 252, 100));
+    for (int cell : dpSelectedBranchCells_) {
+        painter.drawRect(rectOf(cell).adjusted(3, 3, -3, -3));
+    }
+    if (!dpRejectedBranchRoots_.isEmpty()) {
+        QPen rejectedPen(QColor("#b91c1c"), std::max(1.0, cellSize * 0.06));
+        painter.setPen(rejectedPen);
+        painter.setBrush(Qt::NoBrush);
+        for (int cell : dpRejectedBranchRoots_) {
+            painter.drawRect(rectOf(cell).adjusted(4, 4, -4, -4));
+        }
+        painter.setPen(Qt::NoPen);
+    }
 
     if (visiblePathPoints_ > 1) {
         QPainterPath path(centerOf(solutionPath_[0]));

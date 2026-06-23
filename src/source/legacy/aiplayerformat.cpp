@@ -1,4 +1,4 @@
-#include "aiplayerformat.h"
+#include "legacy/aiplayerformat.h"
 
 #include <QJsonArray>
 

@@ -17,6 +17,8 @@ struct OptimizerConfig {
     int tournamentSize = 3;
     int coinCount = 8;
     int trapCount = 5;
+    int coinValue = 50;
+    int trapValue = -30;
     MazeAlgorithm baseAlgorithm = MazeAlgorithm::BreadthFirstSearch;
     quint32 seed = 42;
     // When true (default) the initial population is seeded by round-robining

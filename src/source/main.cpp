@@ -11,6 +11,7 @@
 #include "resource_placer.h"
 
 #include <QApplication>
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -808,7 +809,7 @@ int main(int argc, char *argv[]) {
     bool headlessOptimizer = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--self-test") == 0) {
-            setenv("QT_QPA_PLATFORM", "offscreen", 1);
+            qputenv("QT_QPA_PLATFORM", QByteArray("offscreen"));
             QCoreApplication app(argc, argv);
             return runSelfTests();
         }
@@ -823,7 +824,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (headlessOptimizer) {
-        setenv("QT_QPA_PLATFORM", "offscreen", 1);
+        qputenv("QT_QPA_PLATFORM", QByteArray("offscreen"));
         QCoreApplication app(argc, argv);
         QTextStream out(stdout);
         QTextStream err(stderr);

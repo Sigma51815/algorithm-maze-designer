@@ -19,6 +19,10 @@ struct EvalResult {
     double pathInefficiency = 0.0;
     double topoDifficulty = 0;
     double finalFitness = 0;
+    double designDiscrimination = 0.0;
+    double designStability = 0.0;
+    double designBalance = 0.0;
+    double designGroupScore = 0.0;
 };
 
 struct EvaluatorConfig {

@@ -40,8 +40,11 @@ private:
     QLabel *validationLabel_ = nullptr;
     QPushButton *generateButton_ = nullptr;
     QLabel *resourceResultLabel_ = nullptr;
+    QPlainTextEdit *resourceProcessOutput_ = nullptr;
     QSpinBox *coinSpin_ = nullptr;
     QSpinBox *trapSpin_ = nullptr;
+    QSpinBox *coinValueSpin_ = nullptr;
+    QSpinBox *trapValueSpin_ = nullptr;
     QLineEdit *bossHealthEdit_ = nullptr;
     QLineEdit *skillsEdit_ = nullptr;
     QPlainTextEdit *bossOutput_ = nullptr;
@@ -79,7 +82,6 @@ private:
 
     void buildUi();
     void generateMaze();
-    void placeResources();
     void solveResources();
     void solveBossBattle();
     void showBattleAnimation();

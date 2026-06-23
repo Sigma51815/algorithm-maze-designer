@@ -10,37 +10,43 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 # --- Source files ---
 add_executable(maze_designer
-    src/include/maze.h
-    src/include/bosssolver.h
-    src/include/mainwindow.h
-    src/include/mazewidget.h
-    src/include/battlewindow.h
-    src/include/maze_optimizer.h
-    src/include/maze_saver.h
+    src/include/core/maze.h
+    src/include/game/bosssolver.h
+    src/include/ui/mainwindow.h
+    src/include/ui/mazewidget.h
+    src/include/ui/battlewindow.h
+    src/include/optimization/maze_optimizer.h
+    src/include/io/maze_saver.h
     src/include/ai/greedy_player.h
     src/include/ai/aiplayerformat.h
     src/include/ai/rl_player.h
-    src/include/coevolution.h
-    src/include/resource_placer.h
-    src/include/maze_evaluator.h
+    src/include/optimization/coevolution.h
+    src/include/optimization/resource_placer.h
+    src/include/optimization/maze_evaluator.h
     src/source/main.cpp
-    src/source/maze.cpp
-    src/source/bosssolver.cpp
-    src/source/mainwindow.cpp
-    src/source/mazewidget.cpp
-    src/source/battlewindow.cpp
-    src/source/maze_optimizer.cpp
-    src/source/maze_saver.cpp
+    src/source/core/maze.cpp
+    src/source/game/bosssolver.cpp
+    src/source/ui/mainwindow.cpp
+    src/source/ui/mazewidget.cpp
+    src/source/ui/battlewindow.cpp
+    src/source/optimization/maze_optimizer.cpp
+    src/source/io/maze_saver.cpp
     src/source/ai/greedy_player.cpp
     src/source/ai/aiplayerformat.cpp
     src/source/ai/rl_player.cpp
-    src/source/coevolution.cpp
-    src/source/resource_placer.cpp
-    src/source/maze_evaluator.cpp
+    src/source/optimization/coevolution.cpp
+    src/source/optimization/resource_placer.cpp
+    src/source/optimization/maze_evaluator.cpp
 )
 
 target_include_directories(maze_designer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/ai
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/game
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/io
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/optimization
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include/ui
 )
 target_link_libraries(maze_designer PRIVATE Qt6::Widgets)

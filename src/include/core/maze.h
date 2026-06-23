@@ -23,10 +23,21 @@ struct MazeEdge {
     int to = -1;
 };
 
+struct ResourceBranchDecision {
+    int attachCell = -1;
+    int rootCell = -1;
+    int gain = 0;
+    bool selected = false;
+    QVector<int> cells;
+};
+
 struct ResourcePlan {
     int maxValue = 0;
     QVector<int> walk;
     QVector<int> collectedCells;
+    QVector<int> backboneCells;
+    QVector<ResourceBranchDecision> branchDecisions;
+    QVector<int> cumulativeValues;
 };
 
 struct MazeStatistics {
@@ -58,7 +69,8 @@ inline int autoTrapCount(int cellCount) {
 class MazeModel {
 public:
     void generate(int rows, int columns, MazeAlgorithm algorithm, quint32 seed);
-    void placeResources(int coinCount, int trapCount, quint32 seed);
+    void placeResources(int coinCount, int trapCount, quint32 seed,
+                        int coinValue = 50, int trapValue = -30);
 
     [[nodiscard]] int rows() const { return rows_; }
     [[nodiscard]] int columns() const { return columns_; }

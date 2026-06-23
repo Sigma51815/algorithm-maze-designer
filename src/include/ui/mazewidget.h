@@ -14,6 +14,10 @@ public:
     void setRevealCount(int count);
     void setSolutionPath(const QVector<int> &path, int visiblePoints);
     void clearSolutionPath();
+    void setDpProcessHighlights(const QVector<int> &backbone,
+                                const QVector<int> &selectedBranchCells,
+                                const QVector<int> &rejectedBranchRoots);
+    void clearDpProcessHighlights();
     void setAiPath(const QVector<int> &path, int visiblePoints);
     void clearAiPath();
 
@@ -27,6 +31,9 @@ private:
     int revealCount_ = 0;
     QVector<int> solutionPath_;
     int visiblePathPoints_ = 0;
+    QVector<int> dpBackbone_;
+    QVector<int> dpSelectedBranchCells_;
+    QVector<int> dpRejectedBranchRoots_;
     QVector<int> aiPath_;
     int visibleAiPoints_ = 0;
 

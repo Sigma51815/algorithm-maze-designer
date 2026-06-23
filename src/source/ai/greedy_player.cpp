@@ -105,8 +105,7 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
             if (mc < 0) continue;
             int val = 0;
             if (!collectedCells.contains(mc)) {
-                if (ch == QLatin1Char('G')) val = 50;
-                else if (ch == QLatin1Char('T')) val = -30;
+                val = maze.resourceAt(mc);
             }
             visible.append({nr, nc, mc, val, 2});
         }

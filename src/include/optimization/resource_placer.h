@@ -7,6 +7,8 @@
 struct ResourcePlacerConfig {
     int coinCount = 8;
     int trapCount = 5;
+    int coinValue = 50;
+    int trapValue = -30;
     double deadEndCoinRatio = 0.5;
     double mainPathTrapRatio = 0.3;
     double branchTrapRatio = 0.4;
@@ -17,5 +19,6 @@ class ResourcePlacer {
 public:
     static void placeSmart(MazeModel &maze, const ResourcePlacerConfig &config);
     static void placeAdversarial(MazeModel &maze, const ResourcePlacerConfig &config);
-    static void placeRandom(MazeModel &maze, int coinCount, int trapCount, quint32 seed);
+    static void placeRandom(MazeModel &maze, int coinCount, int trapCount, quint32 seed,
+                            int coinValue = 50, int trapValue = -30);
 };

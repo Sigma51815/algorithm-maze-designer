@@ -1,5 +1,13 @@
 #include "resource_placer.h"
 
+namespace {
+
+int normalizedTrapValue(int value) {
+    return value < 0 ? value : -std::max(1, value);
+}
+
+} // namespace
+
 void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &config) {
     if (maze.cellCount() <= 2) return;
 
@@ -27,7 +35,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
         static_cast<int>(deadEnds.size()));
     std::shuffle(deadEnds.begin(), deadEnds.end(), rng);
     for (int i = 0; i < deadEndCoins && coinsLeft > 0; ++i) {
-        resources[deadEnds[i]] = 50;
+        resources[deadEnds[i]] = config.coinValue;
         --coinsLeft;
     }
 
@@ -35,7 +43,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     std::shuffle(branchDeep.begin(), branchDeep.end(), rng);
     for (int i = 0; i < branchCoins && coinsLeft > 0; ++i) {
         if (resources[branchDeep[i]] == 0) {
-            resources[branchDeep[i]] = 50;
+            resources[branchDeep[i]] = config.coinValue;
             --coinsLeft;
         }
     }
@@ -46,7 +54,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     }
     std::shuffle(remaining.begin(), remaining.end(), rng);
     for (int i = 0; i < coinsLeft && i < remaining.size(); ++i) {
-        resources[remaining[i]] = 50;
+        resources[remaining[i]] = config.coinValue;
     }
 
     // === Place traps ===
@@ -62,7 +70,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     std::shuffle(junctions.begin(), junctions.end(), rng);
     for (int i = 0; i < junctionTraps && trapsLeft > 0; ++i) {
         if (resources[junctions[i]] == 0) {
-            resources[junctions[i]] = -30;
+            resources[junctions[i]] = normalizedTrapValue(config.trapValue);
             --trapsLeft;
         }
     }
@@ -73,7 +81,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     std::shuffle(mainPathCells.begin(), mainPathCells.end(), rng);
     for (int i = 0; i < mainTraps && trapsLeft > 0; ++i) {
         if (resources[mainPathCells[i]] == 0) {
-            resources[mainPathCells[i]] = -30;
+            resources[mainPathCells[i]] = normalizedTrapValue(config.trapValue);
             --trapsLeft;
         }
     }
@@ -84,7 +92,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     }
     std::shuffle(trapRemaining.begin(), trapRemaining.end(), rng);
     for (int i = 0; i < trapsLeft && i < trapRemaining.size(); ++i) {
-        resources[trapRemaining[i]] = -30;
+        resources[trapRemaining[i]] = normalizedTrapValue(config.trapValue);
     }
 
     maze.setResources(resources);
@@ -119,7 +127,7 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
         static_cast<int>(junctions.size()));
     std::shuffle(junctions.begin(), junctions.end(), rng);
     for (int i = 0; i < junctionTraps && trapsLeft > 0; ++i) {
-        resources[junctions[i]] = -30;
+        resources[junctions[i]] = normalizedTrapValue(config.trapValue);
         --trapsLeft;
     }
 
@@ -130,7 +138,7 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     }
     std::shuffle(trapRemaining.begin(), trapRemaining.end(), rng);
     for (int i = 0; i < trapsLeft && i < trapRemaining.size(); ++i) {
-        resources[trapRemaining[i]] = -30;
+        resources[trapRemaining[i]] = normalizedTrapValue(config.trapValue);
     }
 
     // === 对抗式金币分布 ===
@@ -146,7 +154,7 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     }
     std::shuffle(veryDeep.begin(), veryDeep.end(), rng);
     for (int i = 0; i < coinsLeft && i < veryDeep.size(); ++i) {
-        resources[veryDeep[i]] = 50;
+        resources[veryDeep[i]] = config.coinValue;
         --coinsLeft;
     }
 
@@ -154,7 +162,7 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     std::shuffle(branchDeep.begin(), branchDeep.end(), rng);
     for (int i = 0; i < branchDeep.size() && coinsLeft > 0; ++i) {
         if (resources[branchDeep[i]] == 0) {
-            resources[branchDeep[i]] = 50;
+            resources[branchDeep[i]] = config.coinValue;
             --coinsLeft;
         }
     }
@@ -166,12 +174,13 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     }
     std::shuffle(coinRemaining.begin(), coinRemaining.end(), rng);
     for (int i = 0; i < coinsLeft && i < coinRemaining.size(); ++i) {
-        resources[coinRemaining[i]] = 50;
+        resources[coinRemaining[i]] = config.coinValue;
     }
 
     maze.setResources(resources);
 }
 
-void ResourcePlacer::placeRandom(MazeModel &maze, int coinCount, int trapCount, quint32 seed) {
-    maze.placeResources(coinCount, trapCount, seed);
+void ResourcePlacer::placeRandom(MazeModel &maze, int coinCount, int trapCount, quint32 seed,
+                                 int coinValue, int trapValue) {
+    maze.placeResources(coinCount, trapCount, seed, coinValue, trapValue);
 }
