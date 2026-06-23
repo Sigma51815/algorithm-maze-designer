@@ -242,5 +242,19 @@ bool MazeSaver::loadMazeFromJson(const QJsonObject &json, SavedMazeInfo &info) {
     }
     info.maze.setResources(resources);
 
-    return true;
+    const int startCell = json.contains("startCell")
+        ? json["startCell"].toInt(-1)
+        : info.maze.startCell();
+    const int endCell = json.contains("endCell")
+        ? json["endCell"].toInt(-1)
+        : info.maze.endCell();
+    const int bossCell = json["bossAtCell"].toInt(-1);
+    const bool hasBoss = json.contains("hasBoss")
+        ? json["hasBoss"].toBool(false)
+        : bossCell >= 0;
+    if (!info.maze.setSpecialCells(startCell, endCell, bossCell, hasBoss)) {
+        return false;
+    }
+
+    return info.maze.validatePerfect();
 }

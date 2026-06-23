@@ -80,6 +80,7 @@ public:
     [[nodiscard]] int bossCell() const { return bossCell_; }
     [[nodiscard]] bool hasBoss() const { return hasBoss_; }
     void setBossCell(int cell);
+    bool setSpecialCells(int startCell, int endCell, int bossCell, bool hasBoss);
     [[nodiscard]] int resourceAt(int cell) const;
     void consumeResource(int cell);
     [[nodiscard]] bool isOpen(int first, int second) const;

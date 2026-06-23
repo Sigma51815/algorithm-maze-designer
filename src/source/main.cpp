@@ -9,6 +9,7 @@
 #include "maze_evaluator.h"
 #include "maze_optimizer.h"
 #include "resource_placer.h"
+#include "io/maze_saver.h"
 
 #include <QApplication>
 #include <QByteArray>
@@ -408,6 +409,70 @@ int runSelfTests() {
         }
         output << "PASS fromExpandedGrid: " << loaded.rows() << "x" << loaded.columns()
                << ", dp=" << loadedDp.maxValue << '\n';
+    }
+
+    {
+        auto rowsToJson = [](const QStringList &rows) {
+            QJsonArray matrix;
+            for (const QString &row : rows) {
+                matrix.append(row);
+            }
+            return matrix;
+        };
+
+        const QJsonArray validNoBoss = rowsToJson({
+            QStringLiteral("#####"),
+            QStringLiteral("#S  #"),
+            QStringLiteral("# ###"),
+            QStringLiteral("#  E#"),
+            QStringLiteral("#####")
+        });
+        MazeModel imported;
+        QString err;
+        if (!MazeModel::fromExpandedGrid(validNoBoss, imported, &err)) {
+            output << "FAIL fromExpandedGrid no-boss import: " << err << '\n';
+            return 44;
+        }
+        if (imported.startCell() != 0 || imported.endCell() != 3
+            || imported.hasBoss()) {
+            output << "FAIL fromExpandedGrid preserved markers: start="
+                   << imported.startCell() << ", end=" << imported.endCell()
+                   << ", hasBoss=" << imported.hasBoss() << '\n';
+            return 45;
+        }
+
+        SavedMazeInfo info;
+        if (!MazeSaver::loadMazeFromJson(imported.toJson(), info)
+            || info.maze.startCell() != imported.startCell()
+            || info.maze.endCell() != imported.endCell()
+            || info.maze.hasBoss() != imported.hasBoss()) {
+            output << "FAIL native JSON load did not preserve start/end/boss\n";
+            return 46;
+        }
+
+        const QJsonArray disconnected = rowsToJson({
+            QStringLiteral("#####"),
+            QStringLiteral("#S#E#"),
+            QStringLiteral("#####"),
+            QStringLiteral("#   #"),
+            QStringLiteral("#####")
+        });
+        MazeModel rejected;
+        if (MazeModel::fromExpandedGrid(disconnected, rejected, &err)) {
+            output << "FAIL fromExpandedGrid accepted disconnected maze\n";
+            return 47;
+        }
+
+        const QJsonArray ragged = rowsToJson({
+            QStringLiteral("#####"),
+            QStringLiteral("#S #"),
+            QStringLiteral("#####")
+        });
+        if (MazeModel::fromExpandedGrid(ragged, rejected, &err)) {
+            output << "FAIL fromExpandedGrid accepted ragged rows\n";
+            return 48;
+        }
+        output << "PASS import validation: markers, connectivity, row widths\n";
     }
 
     {
@@ -836,11 +901,6 @@ int main(int argc, char *argv[]) {
         cfg.generations = 30;
         cfg.mutationRate = 0.15;
         cfg.tournamentSize = 3;
-        {
-            int cells = cfg.rows * cfg.columns;
-            cfg.coinCount = autoCoinCount(cells);
-            cfg.trapCount = autoTrapCount(cells);
-        }
         cfg.useMixedAlgorithms = true;
         cfg.useAdversarialPlacement = true;
         cfg.useSmartPlacement = false;
@@ -859,6 +919,32 @@ int main(int argc, char *argv[]) {
             else if (arg("--mutation-rate")) cfg.mutationRate = std::atof(argv[++i]);
             else if (arg("--seed")) cfg.seed = static_cast<quint32>(std::atoll(argv[++i]));
             else if (arg("--topo-weight")) cfg.topoWeight = std::atof(argv[++i]);
+        }
+
+        if (cfg.rows < 2 || cfg.columns < 2) {
+            err << "Invalid optimizer configuration: rows and cols must be at least 2.\n";
+            return 2;
+        }
+        if (cfg.populationSize < 1) {
+            err << "Invalid optimizer configuration: population must be at least 1.\n";
+            return 2;
+        }
+        if (cfg.generations < 1) {
+            err << "Invalid optimizer configuration: generations must be at least 1.\n";
+            return 2;
+        }
+        if (cfg.mutationRate < 0.0 || cfg.mutationRate > 1.0) {
+            err << "Invalid optimizer configuration: mutation-rate must be between 0 and 1.\n";
+            return 2;
+        }
+        if (cfg.topoWeight < 0.0) {
+            err << "Invalid optimizer configuration: topo-weight must be non-negative.\n";
+            return 2;
+        }
+        {
+            const int cells = cfg.rows * cfg.columns;
+            cfg.coinCount = autoCoinCount(cells);
+            cfg.trapCount = autoTrapCount(cells);
         }
 
         out << "=== Headless Optimizer ===\n";

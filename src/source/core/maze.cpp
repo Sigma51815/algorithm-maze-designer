@@ -820,7 +820,7 @@ QStringList MazeModel::expandedGrid() const {
             marker = QLatin1Char('S');
         } else if (cell == endCell()) {
             marker = QLatin1Char('E');
-        } else if (cell == bossCell()) {
+        } else if (hasBoss_ && cell == bossCell_) {
             marker = QLatin1Char('B');
         } else if (resourceAt(cell) > 0) {
             marker = QLatin1Char('G');
@@ -845,6 +845,24 @@ void MazeModel::setBossCell(int cell) {
     }
 }
 
+bool MazeModel::setSpecialCells(int startCell, int endCell, int bossCell, bool hasBoss) {
+    if (startCell < 0 || endCell < 0 || startCell >= cellCount()
+        || endCell >= cellCount() || startCell == endCell) {
+        return false;
+    }
+    if (hasBoss
+        && (bossCell < 0 || bossCell >= cellCount()
+            || bossCell == startCell || bossCell == endCell)) {
+        return false;
+    }
+
+    startCell_ = startCell;
+    endCell_ = endCell;
+    hasBoss_ = hasBoss;
+    bossCell_ = hasBoss ? bossCell : -1;
+    return true;
+}
+
 void MazeModel::consumeResource(int cell) {
     if (cell >= 0 && cell < cellCount()) {
         resources_[cell] = 0;
@@ -858,6 +876,7 @@ QJsonObject MazeModel::toJson() const {
     object.insert(QStringLiteral("columns"), columns_);
     object.insert(QStringLiteral("startCell"), startCell());
     object.insert(QStringLiteral("endCell"), endCell());
+    object.insert(QStringLiteral("hasBoss"), hasBoss());
     object.insert(QStringLiteral("bossAtCell"), bossCell());
 
     QJsonArray gridArray;
@@ -992,6 +1011,10 @@ void MazeModel::setFromEdges(int rows, int columns, const QVector<MazeEdge> &edg
                               quint32 seed) {
     reset(rows, columns, seed);
     for (const MazeEdge &edge : edges) {
+        if (edge.from < 0 || edge.to < 0 || edge.from >= cellCount()
+            || edge.to >= cellCount() || !gridNeighbors(edge.from).contains(edge.to)) {
+            continue;
+        }
         carve(edge.from, edge.to);
     }
     chooseDiameterEndpoints();
@@ -1026,6 +1049,12 @@ bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
 
     const int gridRows = grid.size();
     const int gridCols = grid.isEmpty() ? 0 : grid.first().size();
+    for (const QString &line : grid) {
+        if (line.size() != gridCols) {
+            if (error) *error = QStringLiteral("maze rows must have the same width");
+            return false;
+        }
+    }
     if (gridRows < 3 || gridCols < 3 || gridRows % 2 == 0 || gridCols % 2 == 0) {
         if (error) *error = QStringLiteral("迷宫尺寸无效（需奇数×奇数且≥3）");
         return false;
@@ -1040,6 +1069,9 @@ bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
     int startCell = -1;
     int endCell = -1;
     int bossCell = -1;
+    int startCount = 0;
+    int endCount = 0;
+    int bossCount = 0;
     QVector<int> resources(totalCells, 0);
     QVector<MazeEdge> edges;
 
@@ -1050,9 +1082,16 @@ bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
             const int cell = r * logicalCols + c;
             const QChar ch = grid[gr][gc];
 
-            if (ch == QLatin1Char('S')) startCell = cell;
-            else if (ch == QLatin1Char('E')) endCell = cell;
-            else if (ch == QLatin1Char('B')) bossCell = cell;
+            if (ch == QLatin1Char('S')) {
+                startCell = cell;
+                ++startCount;
+            } else if (ch == QLatin1Char('E')) {
+                endCell = cell;
+                ++endCount;
+            } else if (ch == QLatin1Char('B')) {
+                bossCell = cell;
+                ++bossCount;
+            }
             else if (ch == QLatin1Char('G')) resources[cell] = 50;
             else if (ch == QLatin1Char('T')) resources[cell] = -30;
 
@@ -1071,16 +1110,25 @@ bool MazeModel::fromExpandedGrid(const QJsonArray &matrix, MazeModel &out,
         }
     }
 
-    if (startCell < 0 || endCell < 0) {
+    if (startCount != 1 || endCount != 1 || bossCount > 1) {
         if (error) *error = QStringLiteral("未找到起点(S)或终点(E)");
         return false;
     }
 
-    out.setFromEdges(logicalRows, logicalCols, edges, 42);
-    out.setResources(resources);
-    if (bossCell >= 0) out.setBossCell(bossCell);
-    out.startCell_ = startCell;
-    out.endCell_ = endCell;
+    out.reset(logicalRows, logicalCols, 42);
+    for (const MazeEdge &edge : edges) {
+        out.carve(edge.from, edge.to);
+    }
+    out.resources_ = resources;
+    if (!out.setSpecialCells(startCell, endCell, bossCell, bossCell >= 0)) {
+        if (error) *error = QStringLiteral("invalid start, end, or boss marker");
+        return false;
+    }
+    QString reason;
+    if (!out.validatePerfect(&reason)) {
+        if (error) *error = QStringLiteral("imported maze is not perfect: %1").arg(reason);
+        return false;
+    }
 
     return true;
 }
