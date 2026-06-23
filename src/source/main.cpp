@@ -79,17 +79,16 @@ int bruteForceResourceMaximum(const MazeModel &maze) {
     if (count > 20) {
         return 0;
     }
-    const quint64 startBit = quint64{1} << maze.startCell();
-    const quint64 endBit = quint64{1} << maze.endCell();
     int best = std::numeric_limits<int>::min();
-    for (quint64 mask = 0; mask < (quint64{1} << count); ++mask) {
-        if ((mask & startBit) == 0 || (mask & endBit) == 0) {
-            continue;
+    for (quint64 mask = 1; mask < (quint64{1} << count); ++mask) {
+        int firstSelected = 0;
+        while ((mask & (quint64{1} << firstSelected)) == 0) {
+            ++firstSelected;
         }
         QQueue<int> queue;
         QSet<int> reached;
-        queue.enqueue(maze.startCell());
-        reached.insert(maze.startCell());
+        queue.enqueue(firstSelected);
+        reached.insert(firstSelected);
         while (!queue.isEmpty()) {
             const int current = queue.dequeue();
             for (int next : maze.neighbors(current)) {
@@ -108,9 +107,7 @@ int bruteForceResourceMaximum(const MazeModel &maze) {
         }
         int value = 0;
         for (int cell : reached) {
-            if (cell != maze.startCell() && cell != maze.endCell()) {
-                value += maze.resourceAt(cell);
-            }
+            value += maze.resourceAt(cell);
         }
         best = std::max(best, value);
     }
@@ -192,9 +189,8 @@ int runSelfTests() {
         }
         maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), static_cast<quint32>(2000 + i));
         const ResourcePlan plan = maze.optimalResourceWalk();
-        if (plan.walk.isEmpty() || plan.walk.first() != maze.startCell()
-            || plan.walk.last() != maze.endCell()) {
-            output << "FAIL resource path endpoints for algorithm " << i << '\n';
+        if (plan.walk.isEmpty()) {
+            output << "FAIL empty resource path for algorithm " << i << '\n';
             return 2;
         }
         QSet<int> visited;
@@ -207,9 +203,7 @@ int runSelfTests() {
         }
         int value = 0;
         for (int cell : visited) {
-            if (cell != maze.startCell() && cell != maze.endCell()) {
-                value += maze.resourceAt(cell);
-            }
+            value += maze.resourceAt(cell);
         }
         if (value != plan.maxValue) {
             output << "FAIL resource score mismatch for algorithm " << i << '\n';
@@ -219,6 +213,24 @@ int runSelfTests() {
                << ", route=" << shortestPathLength(maze)
                << ", wall-run=" << longestInternalWallRun(maze)
                << ", resource=" << plan.maxValue << '\n';
+    }
+
+    {
+        MazeModel localBest;
+        localBest.setFromEdges(2, 3,
+                               {{0, 1}, {1, 2}, {2, 5}, {2, 4}, {4, 3}},
+                               202800U);
+        localBest.setSpecialCells(0, 5, -1, false);
+        localBest.setResources({0, -100, -100, 80, 90, 0});
+        const ResourcePlan plan = localBest.optimalResourceWalk();
+        QSet<int> chosen(plan.collectedCells.begin(), plan.collectedCells.end());
+        if (plan.maxValue != 170 || chosen.contains(localBest.startCell())
+            || chosen.contains(localBest.endCell())) {
+            output << "FAIL DP local optimum without endpoints: value="
+                   << plan.maxValue << '\n';
+            return 16;
+        }
+        output << "PASS DP local optimum without endpoints\n";
     }
 
     for (int i = 0; i < algorithms.size(); ++i) {
@@ -375,6 +387,62 @@ int runSelfTests() {
         }
     }
     output << "PASS AI JSON contract: exact field order and compact 15x15 rows\n";
+
+    {
+        MazeModel apiMaze;
+        apiMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 202700U);
+        apiMaze.placeResources(autoCoinCount(apiMaze.cellCount()),
+                               autoTrapCount(apiMaze.cellCount()), 202701U);
+        const ResourcePlan apiPlan = apiMaze.optimalResourceWalk();
+        const QVector<int> apiBosses{20, 35};
+        const QVector<BossSkill> apiSkills{{QStringLiteral("Normal"), 5, 0},
+                                           {QStringLiteral("Heavy"), 10, 2}};
+        const BossResult apiBossResult = BossSolver::solve(apiBosses, apiSkills);
+
+        const QJsonObject mazeCheck = buildMazeCheckInput(apiMaze);
+        const QJsonObject resourceCheck = buildResourcePathCheckInput(apiMaze, apiPlan.walk);
+        const QJsonObject bossCheck = buildBossBattleCheckInput(
+            apiBosses, apiSkills, apiBossResult.skillSequence);
+
+        const QJsonArray mazeRows = mazeCheck.value(QStringLiteral("maze")).toArray();
+        bool hasApiOnlyMazeCharacters = true;
+        for (const QJsonValue &rowValue : mazeRows) {
+            const QString row = rowValue.toString();
+            if (row.contains(QLatin1Char(' ')) || row.contains(QLatin1Char('G'))) {
+                hasApiOnlyMazeCharacters = false;
+                break;
+            }
+        }
+        if (!mazeCheck.contains(QStringLiteral("maze"))
+            || mazeRows.size() != apiMaze.rows() * 2 + 1
+            || !mazeRows.first().isString()
+            || !hasApiOnlyMazeCharacters) {
+            output << "FAIL maze check JSON shape\n";
+            return 13;
+        }
+        const QJsonArray resourcePath = resourceCheck.value(QStringLiteral("path")).toArray();
+        const QJsonArray firstPoint = resourcePath.isEmpty()
+            ? QJsonArray{}
+            : resourcePath.first().toArray();
+        const int expectedFirstCell = apiPlan.walk.first();
+        const int expectedStartRow = (expectedFirstCell / apiMaze.columns()) * 2 + 1;
+        const int expectedStartColumn = (expectedFirstCell % apiMaze.columns()) * 2 + 1;
+        if (!resourceCheck.contains(QStringLiteral("maze")) || resourcePath.isEmpty()
+            || firstPoint.size() != 2
+            || firstPoint[0].toInt() != expectedStartRow
+            || firstPoint[1].toInt() != expectedStartColumn) {
+            output << "FAIL resource path check JSON shape\n";
+            return 14;
+        }
+        if (bossCheck.value(QStringLiteral("B")).toArray().size() != apiBosses.size()
+            || bossCheck.value(QStringLiteral("PlayerSkills")).toArray().size() != apiSkills.size()
+            || bossCheck.value(QStringLiteral("SkillSequence")).toArray().size()
+                   != apiBossResult.skillSequence.size()) {
+            output << "FAIL boss battle check JSON shape\n";
+            return 15;
+        }
+        output << "PASS API check JSON builders\n";
+    }
 
     {
         MazeModel original;

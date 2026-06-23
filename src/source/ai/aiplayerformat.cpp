@@ -2,6 +2,9 @@
 
 #include <QJsonArray>
 
+#include <cstdlib>
+#include <utility>
+
 namespace {
 
 QByteArray numberArray(const QVector<int> &values) {
@@ -14,6 +17,77 @@ QByteArray numberArray(const QVector<int> &values) {
     }
     result += ']';
     return result;
+}
+
+QJsonArray compactMazeRowsJson(const MazeModel &maze) {
+    QJsonArray rows;
+    for (QString line : maze.compactGrid()) {
+        line.replace(QLatin1Char(' '), QLatin1Char('.'));
+        line.replace(QLatin1Char('G'), QLatin1Char('C'));
+        rows.append(line);
+    }
+    return rows;
+}
+
+QJsonArray pointJson(int row, int column) {
+    QJsonArray point;
+    point.append(row);
+    point.append(column);
+    return point;
+}
+
+QJsonArray pathJson(const MazeModel &maze, const QVector<int> &walk) {
+    QJsonArray path;
+    if (maze.columns() <= 0 || walk.isEmpty()) {
+        return path;
+    }
+
+    auto centerOf = [&](int cell) {
+        return std::pair<int, int>{
+            (cell / maze.columns()) * 2 + 1,
+            (cell % maze.columns()) * 2 + 1};
+    };
+
+    auto previous = centerOf(walk.first());
+    path.append(pointJson(previous.first, previous.second));
+    for (int i = 1; i < walk.size(); ++i) {
+        const auto current = centerOf(walk[i]);
+        if (std::abs(current.first - previous.first)
+                + std::abs(current.second - previous.second) == 2) {
+            path.append(pointJson((current.first + previous.first) / 2,
+                                  (current.second + previous.second) / 2));
+        }
+        path.append(pointJson(current.first, current.second));
+        previous = current;
+    }
+    return path;
+}
+
+QJsonArray bossHealthJson(const QVector<int> &bossHealth) {
+    QJsonArray array;
+    for (int health : bossHealth) {
+        array.append(health);
+    }
+    return array;
+}
+
+QJsonArray playerSkillsJson(const QVector<BossSkill> &skills) {
+    QJsonArray array;
+    for (const BossSkill &skill : skills) {
+        QJsonArray item;
+        item.append(skill.damage);
+        item.append(skill.cooldown);
+        array.append(item);
+    }
+    return array;
+}
+
+QJsonArray skillSequenceJson(const QVector<int> &skillSequence) {
+    QJsonArray array;
+    for (int skillIndex : skillSequence) {
+        array.append(skillIndex);
+    }
+    return array;
 }
 
 } // namespace
@@ -51,6 +125,30 @@ QJsonObject buildAiPlayerInput(const MazeModel &maze,
     root.insert(QStringLiteral("PlayerSkills"), playerSkills);
     root.insert(QStringLiteral("minRouds"), roundLimit);
     root.insert(QStringLiteral("CoinConsumption"), coinConsumption);
+    return root;
+}
+
+QJsonObject buildMazeCheckInput(const MazeModel &maze) {
+    QJsonObject root;
+    root.insert(QStringLiteral("maze"), compactMazeRowsJson(maze));
+    return root;
+}
+
+QJsonObject buildResourcePathCheckInput(const MazeModel &maze,
+                                        const QVector<int> &walk) {
+    QJsonObject root;
+    root.insert(QStringLiteral("maze"), compactMazeRowsJson(maze));
+    root.insert(QStringLiteral("path"), pathJson(maze, walk));
+    return root;
+}
+
+QJsonObject buildBossBattleCheckInput(const QVector<int> &bossHealth,
+                                      const QVector<BossSkill> &skills,
+                                      const QVector<int> &skillSequence) {
+    QJsonObject root;
+    root.insert(QStringLiteral("B"), bossHealthJson(bossHealth));
+    root.insert(QStringLiteral("PlayerSkills"), playerSkillsJson(skills));
+    root.insert(QStringLiteral("SkillSequence"), skillSequenceJson(skillSequence));
     return root;
 }
 

@@ -12,6 +12,15 @@ QJsonObject buildAiPlayerInput(const MazeModel &maze,
                                int roundLimit,
                                int coinConsumption);
 
+QJsonObject buildMazeCheckInput(const MazeModel &maze);
+
+QJsonObject buildResourcePathCheckInput(const MazeModel &maze,
+                                        const QVector<int> &walk);
+
+QJsonObject buildBossBattleCheckInput(const QVector<int> &bossHealth,
+                                      const QVector<BossSkill> &skills,
+                                      const QVector<int> &skillSequence);
+
 QByteArray serializeAiPlayerInput(const MazeModel &maze,
                                   const QVector<int> &bossHealth,
                                   const QVector<BossSkill> &skills,

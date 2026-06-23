@@ -39,13 +39,10 @@
 
 namespace {
 
-QString formatMatrixPathWithoutEndpoints(const MazeModel &maze, const QVector<int> &walk) {
+QString formatMatrixPath(const MazeModel &maze, const QVector<int> &walk) {
     QStringList points;
     points.reserve(walk.size());
     for (int cell : walk) {
-        if (cell == maze.startCell() || cell == maze.endCell()) {
-            continue;
-        }
         const int matrixRow = (cell / maze.columns()) * 2 + 1;
         const int matrixColumn = (cell % maze.columns()) * 2 + 1;
         points.append(QStringLiteral("(%1,%2)").arg(matrixRow).arg(matrixColumn));
@@ -72,14 +69,21 @@ QString formatCellList(const MazeModel &maze, const QVector<int> &cells, int lim
     return parts.isEmpty() ? QStringLiteral("无") : parts.join(QStringLiteral(" -> "));
 }
 
-int countCellsWithoutEndpoints(const MazeModel &maze, const QVector<int> &cells) {
-    int count = 0;
-    for (int cell : cells) {
-        if (cell != maze.startCell() && cell != maze.endCell()) {
-            ++count;
-        }
+bool writeJsonObject(const QString &path, const QJsonObject &object, QString *error) {
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        if (error) *error = file.errorString();
+        return false;
     }
-    return count;
+    if (file.write(QJsonDocument(object).toJson(QJsonDocument::Indented)) < 0) {
+        if (error) *error = file.errorString();
+        return false;
+    }
+    if (!file.commit()) {
+        if (error) *error = file.errorString();
+        return false;
+    }
+    return true;
 }
 
 QString buildDpProcessReport(const MazeModel &maze, const ResourcePlan &plan) {
@@ -123,11 +127,11 @@ QString buildDpProcessReport(const MazeModel &maze, const ResourcePlan &plan) {
 
     QString report;
     report += QStringLiteral("DP过程说明\n");
-    report += QStringLiteral("1. 先取 S 到 E 的主路径作为必须经过的骨架。\n");
-    report += QStringLiteral("   主路径：%1\n").arg(formatCellList(maze, plan.backboneCells));
-    report += QStringLiteral("2. 对主路径两侧每棵分支树自底向上计算收益 gain(cell)。\n");
+    report += QStringLiteral("1. 在整棵迷宫树上选择全局最大资源连通区域，不强制经过 S 或 E。\n");
+    report += QStringLiteral("   最优资源区域：%1\n").arg(formatCellList(maze, plan.backboneCells));
+    report += QStringLiteral("2. 对每个方向的子树自底向上计算收益 gain(cell)。\n");
     report += QStringLiteral("   规则：gain = 当前资源值 + 子分支 max(0, gain)，收益 <= 0 的分支不进入最优路线。\n");
-    report += QStringLiteral("3. 被选分支：%1 个，分支收益合计 %2。\n")
+    report += QStringLiteral("3. 被选正收益分支：%1 个，分支收益合计 %2。\n")
         .arg(selected.size()).arg(selectedGain);
     for (const QString &line : selected.mid(0, 12)) {
         report += QStringLiteral("   + %1\n").arg(line);
@@ -135,7 +139,7 @@ QString buildDpProcessReport(const MazeModel &maze, const ResourcePlan &plan) {
     if (selected.size() > 12) {
         report += QStringLiteral("   ... 另有 %1 个正收益分支\n").arg(selected.size() - 12);
     }
-    report += QStringLiteral("4. 放弃分支：%1 个（非正收益，避免绕路踩陷阱或低收益）。\n").arg(rejectedCount);
+    report += QStringLiteral("4. 放弃分支：%1 个（非正收益，避免踩陷阱或低收益区域）。\n").arg(rejectedCount);
     for (const QString &line : rejected) {
         report += QStringLiteral("   - %1\n").arg(line);
     }
@@ -343,6 +347,9 @@ void MainWindow::buildUi() {
     generationOuter->addLayout(resourceConfig);
 
     generationOuter->addWidget(generateButton_);
+    auto *exportMazeCheckButton = new QPushButton(QStringLiteral("导出迷宫检查 JSON"));
+    exportMazeCheckButton->setObjectName(QStringLiteral("secondaryButton"));
+    generationOuter->addWidget(exportMazeCheckButton);
 
     auto updateLegend = [legend, this]() {
         legend->setText(QStringLiteral(
@@ -403,6 +410,8 @@ void MainWindow::buildUi() {
             runOptimizer();
         }
     });
+    connect(exportMazeCheckButton, &QPushButton::clicked,
+            this, &MainWindow::exportMazeCheckJson);
 
     // GA master switch: lock/unlock the optimization sub-panel.
     auto updateOptPanelEnabled = [this](bool enabled) {
@@ -426,9 +435,15 @@ void MainWindow::buildUi() {
     resourceGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *resourceLayout = new QVBoxLayout(resourceGroup);
     resourceLayout->setSpacing(8);
+    auto *resourceButtons = new QHBoxLayout;
+    resourceButtons->setSpacing(8);
     auto *solveResourceButton = new QPushButton(QStringLiteral("DP 求最优路径"));
     solveResourceButton->setObjectName(QStringLiteral("primaryButton"));
-    resourceLayout->addWidget(solveResourceButton);
+    auto *exportResourceButton = new QPushButton(QStringLiteral("导出DP路径 JSON"));
+    exportResourceButton->setObjectName(QStringLiteral("secondaryButton"));
+    resourceButtons->addWidget(solveResourceButton);
+    resourceButtons->addWidget(exportResourceButton);
+    resourceLayout->addLayout(resourceButtons);
     resourceResultLabel_ = new QLabel(QStringLiteral("尚未求解"));
     resourceResultLabel_->setObjectName(QStringLiteral("resultLabel"));
     resourceResultLabel_->setWordWrap(true);
@@ -441,6 +456,8 @@ void MainWindow::buildUi() {
     resourceLayout->addWidget(resourceProcessOutput_);
     panelLayout->addWidget(resourceGroup);
     connect(solveResourceButton, &QPushButton::clicked, this, &MainWindow::solveResources);
+    connect(exportResourceButton, &QPushButton::clicked,
+            this, &MainWindow::exportResourcePathJson);
 
     panelLayout->addWidget(makeSeparator());
 
@@ -471,8 +488,11 @@ void MainWindow::buildUi() {
     solveBossButton->setObjectName(QStringLiteral("primaryButton"));
     auto *battleAnimationButton = new QPushButton(QStringLiteral("战斗动画"));
     battleAnimationButton->setObjectName(QStringLiteral("accentButton"));
+    auto *exportBossButton = new QPushButton(QStringLiteral("导出BOSS检查 JSON"));
+    exportBossButton->setObjectName(QStringLiteral("secondaryButton"));
     bossButtons->addWidget(solveBossButton);
     bossButtons->addWidget(battleAnimationButton);
+    bossButtons->addWidget(exportBossButton);
     bossLayout->addLayout(bossButtons);
     bossOutput_ = new QPlainTextEdit;
     bossOutput_->setObjectName(QStringLiteral("outputConsole"));
@@ -484,6 +504,8 @@ void MainWindow::buildUi() {
     connect(solveBossButton, &QPushButton::clicked, this, &MainWindow::solveBossBattle);
     connect(battleAnimationButton, &QPushButton::clicked,
             this, &MainWindow::showBattleAnimation);
+    connect(exportBossButton, &QPushButton::clicked,
+            this, &MainWindow::exportBossBattleJson);
 
     panelLayout->addWidget(makeSeparator());
 
@@ -712,8 +734,8 @@ void MainWindow::solveResources() {
     generationTimer_->stop();
     mazeWidget_->setRevealCount(maze_.generationSteps().size());
     lastPlan_ = maze_.optimalResourceWalk();
-    const QString pathText = formatMatrixPathWithoutEndpoints(maze_, lastPlan_.walk);
-    const int collectedCells = countCellsWithoutEndpoints(maze_, lastPlan_.collectedCells);
+    const QString pathText = formatMatrixPath(maze_, lastPlan_.walk);
+    const int collectedCells = lastPlan_.collectedCells.size();
     QVector<int> selectedBranchCells;
     QVector<int> rejectedBranchRoots;
     QSet<int> selectedSet;
@@ -732,7 +754,7 @@ void MainWindow::solveResources() {
     resourceResultLabel_->setText(
         QStringLiteral("<b>最多资源：%1</b>  |  行走 %2 步  |  首经 %3 格<br/>"
                        "<span style='color:#7c2d12;font-size:11px'>"
-                       "最优路径（矩阵坐标，不含起点和终点）：%4</span><br/>"
+                       "最优资源路径（矩阵坐标）：%4</span><br/>"
                        "<span style='color:#94a3b8;font-size:11px'>路径允许回访，金币/陷阱只计一次</span>")
             .arg(lastPlan_.maxValue)
             .arg(std::max(0, static_cast<int>(lastPlan_.walk.size()) - 1))
@@ -1092,6 +1114,100 @@ void MainWindow::updateValidation() {
             .arg(stats.longestCorridor));
     validationLabel_->setStyleSheet(valid ? QStringLiteral("color:#2E7D32;")
                                           : QStringLiteral("color:#C62828;"));
+}
+
+void MainWindow::exportMazeCheckJson() {
+    if (maze_.cellCount() == 0) {
+        return;
+    }
+
+    const QJsonObject root = buildMazeCheckInput(maze_);
+
+    const QString defaultName = QStringLiteral("maze_check_%1x%2.json")
+                                    .arg(maze_.rows() * 2 + 1)
+                                    .arg(maze_.columns() * 2 + 1);
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出迷宫检查 JSON"), defaultName,
+        QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    if (!writeJsonObject(path, root, &error)) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"),
+                              QStringLiteral("无法写入文件：%1").arg(error));
+        return;
+    }
+    statusBar()->showMessage(QStringLiteral("已导出迷宫检查 JSON：%1").arg(path), 5000);
+}
+
+void MainWindow::exportResourcePathJson() {
+    if (maze_.cellCount() == 0) {
+        return;
+    }
+    if (lastPlan_.walk.isEmpty()) {
+        lastPlan_ = maze_.optimalResourceWalk();
+    }
+
+    const QJsonObject root = buildResourcePathCheckInput(maze_, lastPlan_.walk);
+
+    const QString defaultName = QStringLiteral("resource_path_%1x%2.json")
+                                    .arg(maze_.rows() * 2 + 1)
+                                    .arg(maze_.columns() * 2 + 1);
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出 DP 资源路径 JSON"), defaultName,
+        QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    if (!writeJsonObject(path, root, &error)) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"),
+                              QStringLiteral("无法写入文件：%1").arg(error));
+        return;
+    }
+    statusBar()->showMessage(QStringLiteral("已导出 DP 资源路径 JSON：%1").arg(path), 5000);
+}
+
+void MainWindow::exportBossBattleJson() {
+    bool healthOk = false;
+    bool skillsOk = false;
+    const QVector<int> health = parseBossHealth(&healthOk);
+    const QVector<BossSkill> skills = parseSkills(&skillsOk);
+    if (!healthOk || !skillsOk) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("请先填写正确的 BOSS 血量与技能参数。"));
+        return;
+    }
+
+    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
+    if (!lastBossResult_.solved
+        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("当前参数没有可验证的最优技能序列。"));
+        return;
+    }
+
+    const QJsonObject root = buildBossBattleCheckInput(
+        health, skills, lastBossResult_.skillSequence);
+
+    const QString defaultName = QStringLiteral("boss_battle_check.json");
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出 BOSS 检查 JSON"), defaultName,
+        QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    if (!writeJsonObject(path, root, &error)) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"),
+                              QStringLiteral("无法写入文件：%1").arg(error));
+        return;
+    }
+    statusBar()->showMessage(QStringLiteral("已导出 BOSS 检查 JSON：%1").arg(path), 5000);
 }
 
 void MainWindow::exportMaze() {

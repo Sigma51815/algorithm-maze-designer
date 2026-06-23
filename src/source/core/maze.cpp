@@ -2,11 +2,13 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QHash>
 #include <QQueue>
 #include <QSet>
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <numeric>
 #include <queue>
 
@@ -682,60 +684,63 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
         return result;
     }
 
-    QVector<int> parent(cellCount(), -1);
-    QQueue<int> queue;
-    queue.enqueue(startCell());
-    parent[startCell()] = startCell();
-    while (!queue.isEmpty() && parent[endCell()] < 0) {
-        const int current = queue.dequeue();
-        for (int next : neighbors(current)) {
-            if (parent[next] < 0) {
-                parent[next] = current;
-                queue.enqueue(next);
-            }
-        }
-    }
-
-    QVector<int> backbone;
-    for (int cell = endCell();; cell = parent[cell]) {
-        backbone.prepend(cell);
-        if (cell == startCell()) {
-            break;
-        }
-    }
-    QVector<bool> onBackbone(cellCount(), false);
-    for (int cell : backbone) {
-        onBackbone[cell] = true;
-    }
-    result.backboneCells = backbone;
-
-    QVector<int> gain(cellCount(), 0);
+    QVector<QHash<int, int>> directedGain(cellCount());
     std::function<int(int, int)> calculateGain = [&](int cell, int from) {
+        const auto cached = directedGain[cell].constFind(from);
+        if (cached != directedGain[cell].constEnd()) {
+            return *cached;
+        }
         int value = resourceAt(cell);
         for (int next : neighbors(cell)) {
-            if (next == from || onBackbone[next]) {
+            if (next == from) {
                 continue;
             }
             value += std::max(0, calculateGain(next, cell));
         }
-        gain[cell] = value;
+        directedGain[cell].insert(from, value);
         return value;
     };
 
-    for (int cell : backbone) {
-        for (int next : neighbors(cell)) {
-            if (!onBackbone[next]) {
-                calculateGain(next, cell);
-            }
+    int bestRoot = 0;
+    int bestValue = std::numeric_limits<int>::min();
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        const int value = calculateGain(cell, -1);
+        if (value > bestValue) {
+            bestValue = value;
+            bestRoot = cell;
         }
     }
 
-    auto collectBranchCells = [&](int root, int from) {
+    QSet<int> selected;
+    std::function<void(int, int)> selectPositiveSubtree = [&](int cell, int from) {
+        selected.insert(cell);
+        for (int next : neighbors(cell)) {
+            if (next == from) {
+                continue;
+            }
+            if (calculateGain(next, cell) > 0) {
+                selectPositiveSubtree(next, cell);
+            }
+        }
+    };
+    if (bestValue > 0 || resourceAt(bestRoot) >= 0) {
+        selectPositiveSubtree(bestRoot, -1);
+    } else {
+        selected.insert(bestRoot);
+    }
+
+    result.backboneCells = selected.values();
+    std::sort(result.backboneCells.begin(), result.backboneCells.end());
+
+    auto collectSelectedCells = [&](int root, int from) {
         QVector<int> cells;
         std::function<void(int, int)> visit = [&](int cell, int parentCell) {
+            if (!selected.contains(cell)) {
+                return;
+            }
             cells.append(cell);
             for (int next : neighbors(cell)) {
-                if (next == parentCell || onBackbone[next]) {
+                if (next == parentCell) {
                     continue;
                 }
                 visit(next, cell);
@@ -746,60 +751,61 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
         return cells;
     };
 
-    for (int cell : backbone) {
+    for (int next : neighbors(bestRoot)) {
+        if (!selected.contains(next)) {
+            continue;
+        }
+        ResourceBranchDecision decision;
+        decision.attachCell = bestRoot;
+        decision.rootCell = next;
+        decision.gain = calculateGain(next, bestRoot);
+        decision.selected = true;
+        decision.cells = collectSelectedCells(next, bestRoot);
+        result.branchDecisions.append(decision);
+    }
+
+    for (int cell = 0; cell < cellCount(); ++cell) {
+        if (!selected.contains(cell)) {
+            continue;
+        }
         for (int next : neighbors(cell)) {
-            if (onBackbone[next]) {
+            if (selected.contains(next) || cell > next) {
                 continue;
             }
             ResourceBranchDecision decision;
             decision.attachCell = cell;
             decision.rootCell = next;
-            decision.gain = gain[next];
-            decision.selected = gain[next] > 0;
-            decision.cells = collectBranchCells(next, cell);
+            decision.gain = calculateGain(next, cell);
+            decision.selected = decision.gain > 0;
+            decision.cells = collectSelectedCells(next, cell);
             result.branchDecisions.append(decision);
         }
     }
 
-    result.walk.append(startCell());
-    std::function<void(int, int)> appendExcursion = [&](int cell, int from) {
-        result.walk.append(cell);
+    result.walk.append(bestRoot);
+    std::function<void(int, int)> appendSelectedWalk = [&](int cell, int from) {
         for (int next : neighbors(cell)) {
-            if (next == from || onBackbone[next] || gain[next] <= 0) {
+            if (next == from || !selected.contains(next)) {
                 continue;
             }
-            appendExcursion(next, cell);
+            result.walk.append(next);
+            appendSelectedWalk(next, cell);
+            result.walk.append(cell);
         }
-        result.walk.append(from);
     };
+    appendSelectedWalk(bestRoot, -1);
 
-    for (int i = 0; i + 1 < backbone.size(); ++i) {
-        const int current = backbone[i];
-        for (int next : neighbors(current)) {
-            if (!onBackbone[next] && gain[next] > 0) {
-                appendExcursion(next, current);
-            }
-        }
-        result.walk.append(backbone[i + 1]);
-    }
-
-    QSet<int> collected;
     int cumulative = 0;
     for (int cell : result.walk) {
-        if (!collected.contains(cell)) {
-            collected.insert(cell);
-            if (cell != startCell() && cell != endCell()) {
-                cumulative += resourceAt(cell);
-            }
+        if (!result.collectedCells.contains(cell)) {
+            result.collectedCells.append(cell);
+            cumulative += resourceAt(cell);
         }
         result.cumulativeValues.append(cumulative);
     }
-    result.collectedCells = collected.values();
     std::sort(result.collectedCells.begin(), result.collectedCells.end());
     for (int cell : result.collectedCells) {
-        if (cell != startCell() && cell != endCell()) {
-            result.maxValue += resourceAt(cell);
-        }
+        result.maxValue += resourceAt(cell);
     }
     return result;
 }

@@ -85,6 +85,9 @@ private:
     void solveResources();
     void solveBossBattle();
     void showBattleAnimation();
+    void exportMazeCheckJson();
+    void exportResourcePathJson();
+    void exportBossBattleJson();
     void exportMaze();
     void loadMaze();
     void runAiPlayer();
