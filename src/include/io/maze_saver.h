@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ai/rl_player.h"
-#include "coevolution.h"
 #include "maze.h"
 #include "maze_optimizer.h"
 
@@ -10,12 +8,11 @@
 
 struct SavedMazeInfo {
     QString name;
-    QString source;           // "ga", "coevolution", "rl", "manual"
+    QString source;           // "ga", "manual"
     MazeModel maze;
     int fitness = 0;
     int dpScore = 0;
     int greedyScore = 0;
-    int rlScore = 0;
     QDateTime timestamp;
     QJsonObject metadata;
 };
@@ -26,19 +23,9 @@ public:
                          const QString &name = QString(),
                          const QString &source = QString(),
                          int fitness = 0, int dpScore = 0,
-                         int greedyScore = 0, int rlScore = 0);
+                         int greedyScore = 0);
 
     static bool loadMaze(const QString &path, SavedMazeInfo &info);
-
-    static bool saveQTable(const QString &path, const double qTable[][4],
-                           int stateSize, const RLConfig &config);
-
-    static bool loadQTable(const QString &path, double qTable[][4],
-                           int stateSize, RLConfig &config);
-
-    static bool saveCoEvolResult(const QString &path,
-                                 const CoEvolResult &result,
-                                 const CoEvolConfig &config);
 
     static bool saveGAResult(const QString &path,
                              const MazeModel &maze,
@@ -49,7 +36,7 @@ public:
                                   const QString &name,
                                   const QString &source,
                                   int fitness, int dpScore,
-                                  int greedyScore, int rlScore);
+                                  int greedyScore);
 
     static bool loadMazeFromJson(const QJsonObject &json, SavedMazeInfo &info);
 };

@@ -4,6 +4,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 
 namespace {
@@ -13,31 +14,8 @@ struct VisibleCell {
     int gridCol = 0;
     int mazeCell = -1;
     int value = 0;
-    int dist = 0;
+    int dist = 0;  // expanded-grid distance, always 2 for immediate neighbours
 };
-
-QVector<int> bfsPath(const MazeModel &maze, int from, int to) {
-    if (from == to) return {from};
-    QVector<int> parent(maze.cellCount(), -1);
-    QQueue<int> queue;
-    parent[from] = from;
-    queue.enqueue(from);
-    while (!queue.isEmpty()) {
-        int cur = queue.dequeue();
-        for (int nb : maze.neighbors(cur)) {
-            if (parent[nb] >= 0) continue;
-            parent[nb] = cur;
-            if (nb == to) {
-                QVector<int> path;
-                for (int c = to; c != from; c = parent[c]) path.prepend(c);
-                path.prepend(from);
-                return path;
-            }
-            queue.enqueue(nb);
-        }
-    }
-    return {};
-}
 
 } // namespace
 
@@ -78,19 +56,23 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
     visitCount[pos] = 1;
     result.walk.append(pos);
 
-
+    const int endCell = maze.endCell();
+    const int cols = maze.columns();
+    const int endRow = endCell / cols;
+    const int endCol = endCell % cols;
 
     while (result.totalSteps < maxSteps) {
-        if (pos == maze.endCell()) {
+        if (pos == endCell) {
             result.reachedEnd = true;
             break;
         }
 
-        int cellRow = pos / maze.columns();
-        int cellCol = pos % maze.columns();
+        int cellRow = pos / cols;
+        int cellCol = pos % cols;
         int gr = cellRow * 2 + 1;
         int gc = cellCol * 2 + 1;
 
+        // ---- 3×3 视野：扫描四个相邻方向 ----
         QVector<VisibleCell> visible;
         const int dirs[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
         for (auto &d : dirs) {
@@ -110,11 +92,26 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
             visible.append({nr, nc, mc, val, 2});
         }
 
-        int target = -1;
+        // ---- 贪心目标选择 + 直接踏入（纯 3×3，无 BFS）----
+        int nextCell = -1;
 
         if (strategy == GreedyStrategy::EndGoalFirst) {
-            target = maze.endCell();
+            // 朝终点方向：选 4 邻居中曼哈顿距离最小的
+            int bestDist = std::numeric_limits<int>::max();
+            int bestVisits = std::numeric_limits<int>::max();
+            for (const auto &vc : visible) {
+                int nr = vc.mazeCell / cols;
+                int nc = vc.mazeCell % cols;
+                int md = std::abs(nr - endRow) + std::abs(nc - endCol);
+                int vis = visitCount.value(vc.mazeCell, 0);
+                if (md < bestDist || (md == bestDist && vis < bestVisits)) {
+                    bestDist = md;
+                    bestVisits = vis;
+                    nextCell = vc.mazeCell;
+                }
+            }
         } else {
+            // 资源收集策略：从可见相邻格中选目标，直接踏入
             double bestScore = -1e9;
             bool foundResource = false;
             for (const auto &vc : visible) {
@@ -125,58 +122,53 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
                 double sc = 0.0;
                 switch (strategy) {
                 case GreedyStrategy::ValuePerStep:
-                    sc = static_cast<double>(vc.value) / vc.dist;
+                    sc = static_cast<double>(vc.value) / vc.dist;  // dist=2, so ∝ value
                     break;
-                case GreedyStrategy::NearestFirst:
-                    sc = 1.0 / vc.dist;
+                case GreedyStrategy::CautiousCollector:
+                    sc = static_cast<double>(vc.value) / vc.dist;  // 只拿正价值，同AvoidTraps
                     break;
                 case GreedyStrategy::AvoidTraps:
                     sc = static_cast<double>(vc.value) / vc.dist;
                     break;
-                case GreedyStrategy::EndGoalFirst:
-                    sc = 0.0;
+                default:
                     break;
                 }
                 if (sc > bestScore) {
                     bestScore = sc;
-                    target = vc.mazeCell;
+                    nextCell = vc.mazeCell;
                 }
             }
 
-            if (!foundResource) {
+            // 无可见资源 → 探索：去访问次数最少的邻居
+            if (!foundResource || nextCell < 0) {
                 int leastVisited = std::numeric_limits<int>::max();
-                int bestTarget = -1;
+                int bestManhattan = std::numeric_limits<int>::max();
                 for (const auto &vc : visible) {
                     int visits = visitCount.value(vc.mazeCell, 0);
-                    if (visits < leastVisited) {
-                        leastVisited = visits;
-                        bestTarget = vc.mazeCell;
+                    // CautiousCollector 探索时偏好朝终点方向（曼哈顿最近）
+                    // 其他策略纯最少访问（迭代顺序决定 tie-break）
+                    if (strategy == GreedyStrategy::CautiousCollector) {
+                        int md = std::abs(vc.mazeCell / cols - endRow)
+                               + std::abs(vc.mazeCell % cols - endCol);
+                        if (visits < leastVisited
+                            || (visits == leastVisited && md < bestManhattan)) {
+                            leastVisited = visits;
+                            bestManhattan = md;
+                            nextCell = vc.mazeCell;
+                        }
+                    } else {
+                        if (visits < leastVisited) {
+                            leastVisited = visits;
+                            nextCell = vc.mazeCell;
+                        }
                     }
                 }
-                if (bestTarget >= 0) target = bestTarget;
             }
         }
 
-        if (target < 0 || target == pos) {
-            int leastVisited = std::numeric_limits<int>::max();
-            int bestTarget = -1;
-            for (const auto &vc : visible) {
-                int visits = visitCount.value(vc.mazeCell, 0);
-                if (visits < leastVisited) {
-                    leastVisited = visits;
-                    bestTarget = vc.mazeCell;
-                }
-            }
-            if (bestTarget >= 0) target = bestTarget;
-            else break;
-        }
+        // 无路可走
+        if (nextCell < 0 || nextCell == pos) break;
 
-        if (target == pos) break;
-
-        QVector<int> path = bfsPath(maze, pos, target);
-        if (path.size() < 2) break;
-
-        int nextCell = path[1];
         pos = nextCell;
         ++result.totalSteps;
         result.walk.append(pos);
@@ -201,7 +193,7 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
             }
         }
 
-        if (pos == maze.endCell()) {
+        if (pos == endCell) {
             result.reachedEnd = true;
             break;
         }

@@ -110,7 +110,8 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
             continue;
         allCells.append(cell);
         if (topo[cell].isDeadEnd) deadEnds.append(cell);
-        else if (topo[cell].isJunction) junctions.append(cell);
+        else if (topo[cell].isJunction && !topo[cell].onMainPath)
+            junctions.append(cell);  // 只收集非主路径分叉口，避免必经过路陷阱过度惩罚EndGoalFirst
         if (!topo[cell].onMainPath && topo[cell].branchDepth >= 2) branchDeep.append(cell);
         if (topo[cell].onMainPath) mainPathCells.append(cell);
     }
@@ -118,10 +119,10 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     QVector<int> resources(maze.cellCount(), 0);
 
     // === 对抗式陷阱分布 ===
-    // 陷阱放在分叉口（迫使AI在探索时踩到）和主路径上
+    // 陷阱优先放在非主路径分叉口（探索型AI踩，直奔终点型AI不踩 → 增加区分度）
     int trapsLeft = std::min(config.trapCount, static_cast<int>(allCells.size()));
 
-    // 70% 陷阱放分叉口（包括主路径分叉口）
+    // 70% 陷阱放非主路径分叉口
     int junctionTraps = std::min(
         static_cast<int>(trapsLeft * 0.7),
         static_cast<int>(junctions.size()));

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ai/greedy_player.h"
-#include "ai/rl_player.h"
 #include "bosssolver.h"
 #include "maze.h"
 #include "maze_optimizer.h"

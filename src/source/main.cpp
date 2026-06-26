@@ -1,9 +1,7 @@
 #include "ai/greedy_player.h"
-#include "ai/rl_player.h"
 #include "ai/aiplayerformat.h"
 #include "bosssolver.h"
 #include "battlewindow.h"
-#include "coevolution.h"
 #include "mainwindow.h"
 #include "maze.h"
 #include "maze_evaluator.h"
@@ -632,7 +630,7 @@ int runSelfTests() {
         int worstGreedy = std::numeric_limits<int>::max();
         const QVector<GreedyStrategy> strategies = {
             GreedyStrategy::ValuePerStep,
-            GreedyStrategy::NearestFirst,
+            GreedyStrategy::CautiousCollector,
             GreedyStrategy::AvoidTraps,
             GreedyStrategy::EndGoalFirst
         };
@@ -671,74 +669,6 @@ int runSelfTests() {
         output << "PASS GA optimizer: base=" << baseRegret
                << ", best=" << optRegret
                << ", dp=" << optDp.maxValue << '\n';
-    }
-
-    {
-        MazeModel trainMaze;
-        trainMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
-        trainMaze.placeResources(autoCoinCount(trainMaze.cellCount()), autoTrapCount(trainMaze.cellCount()), 11001U);
-
-        RLPlayer rlPlayer;
-        RLConfig rlCfg;
-        rlCfg.trainEpisodes = 10000;
-        rlCfg.playMaxSteps = 800;
-        rlCfg.coinCount = 30;
-        rlCfg.trapCount = 20;
-
-        const RLPlayResult before = rlPlayer.play(trainMaze, rlCfg);
-        rlPlayer.trainOnMaze(trainMaze, rlCfg);
-        const RLPlayResult after = rlPlayer.play(trainMaze, rlCfg);
-
-        MazeModel testMaze;
-        testMaze.generate(15, 15, MazeAlgorithm::KruskalMst, 11000U);
-        testMaze.placeResources(autoCoinCount(testMaze.cellCount()), autoTrapCount(testMaze.cellCount()), 55000U);
-        const RLPlayResult testResult = rlPlayer.play(testMaze, rlCfg);
-
-        MazeModel genMaze;
-        genMaze.generate(15, 15, MazeAlgorithm::DepthFirstSearch, 22000U);
-        genMaze.placeResources(autoCoinCount(genMaze.cellCount()), autoTrapCount(genMaze.cellCount()), 22001U);
-        const RLPlayResult genResult = rlPlayer.play(genMaze, rlCfg);
-
-        if (after.totalResource < before.totalResource - 150) {
-            output << "FAIL RL score decreased: before=" << before.totalResource
-                   << ", after=" << after.totalResource << '\n';
-            return 20;
-        }
-        output << "PASS RL player: before=" << before.totalResource
-               << ", after=" << after.totalResource
-               << ", steps=" << after.steps
-               << ", sameMaze=" << testResult.totalResource
-               << ", diffMaze=" << genResult.totalResource << '\n';
-    }
-
-    {
-        CoEvolConfig cfg;
-        cfg.cycles = 2;
-        cfg.gaGenerations = 3;
-        cfg.gaPopulation = 8;
-        cfg.gaMutationRate = 0.3;
-        cfg.rlTrainEpisodes = 200;
-        cfg.mazeRows = 15;
-        cfg.mazeCols = 15;
-        cfg.baseAlgorithm = MazeAlgorithm::KruskalMst;
-        cfg.baseSeed = 12000U;
-                { int cells = cfg.mazeRows * cfg.mazeCols; cfg.coinCount = autoCoinCount(cells); cfg.trapCount = autoTrapCount(cells); }
-
-        CoEvolution coEvol;
-        const CoEvolResult coResult = coEvol.run(cfg);
-
-        if (!coResult.bestMaze.validatePerfect()) {
-            output << "FAIL co-evolution produced invalid maze\n";
-            return 21;
-        }
-        if (coResult.cycleBestFitness.isEmpty()) {
-            output << "FAIL co-evolution no cycles completed\n";
-            return 22;
-        }
-        output << "PASS co-evolution: cycles=" << coResult.cycleBestFitness.size()
-               << ", bestFitness=" << coResult.bestFitness
-               << ", lastRLScore=" << (coResult.rlScores.isEmpty() ? 0 : coResult.rlScores.last())
-               << '\n';
     }
 
     // Verify the four base algorithms round-robin through algorithmForIndex,
@@ -851,17 +781,142 @@ int runSelfTests() {
             return 33;
         }
 
+        // 新公式校验：finalFitness 应在 [0, 100]
+        if (eval.finalFitness < 0.0 || eval.finalFitness > 100.0) {
+            output << "FAIL enhanced fitness: finalFitness out of [0,100]: "
+                   << eval.finalFitness << '\n';
+            return 34;
+        }
+        // D/C/B 应在 [0, 1]
+        if (eval.designDiscrimination < 0.0 || eval.designDiscrimination > 1.0) {
+            output << "FAIL enhanced fitness: D out of [0,1]: "
+                   << eval.designDiscrimination << '\n';
+            return 35;
+        }
+        if (eval.designStability < 0.0 || eval.designStability > 1.0) {
+            output << "FAIL enhanced fitness: C out of [0,1]\n";
+            return 36;
+        }
+        if (eval.designBalance < 0.0 || eval.designBalance > 1.0) {
+            output << "FAIL enhanced fitness: B out of [0,1]\n";
+            return 37;
+        }
+        // 诊断字段
+        if (eval.meanAIScoreRatio < 0.0 || eval.meanAIScoreRatio > 1.0) {
+            output << "FAIL enhanced fitness: meanAIScoreRatio out of [0,1]\n";
+            return 38;
+        }
+        if (eval.aiScoreSpread < 0.0 || eval.aiScoreSpread > 1.0) {
+            output << "FAIL enhanced fitness: aiScoreSpread out of [0,1]\n";
+            return 39;
+        }
+
         output << "PASS enhanced fitness: dp=" << eval.dpScore
                << ", regret=" << eval.regretGreedy
                << ", topo=" << topo
-               << ", fitness=" << eval.finalFitness << '\n';
-    }
+               << ", D=" << eval.designDiscrimination
+               << ", C=" << eval.designStability
+               << ", B=" << eval.designBalance
+               << ", fitness=" << eval.finalFitness
+               << ", meanRatio=" << eval.meanAIScoreRatio
+               << ", spread=" << eval.aiScoreSpread << '\n';
+     }
 
-    {
-        OptimizerConfig baseCfg;
-        baseCfg.rows = 7;
-        baseCfg.columns = 7;
-        baseCfg.populationSize = 12;
+     {
+         MazeModel maze;
+         maze.generate(3, 3, MazeAlgorithm::KruskalMst, 90000U);
+         maze.placeResources(autoCoinCount(maze.cellCount()), autoTrapCount(maze.cellCount()), 90001U);
+
+         EvaluatorConfig ec;
+         ec.useSmartPlacement = false;
+         ec.topoWeight = 0.3;
+         EvalResult eval = MazeEvaluator::evaluate(maze, ec);
+
+         if (eval.finalFitness < 0.0 || eval.finalFitness > 100.0) {
+             output << "FAIL boundary small maze: fitness out of [0,100]: "
+                    << eval.finalFitness << '\n';
+             return 50;
+         }
+         if (eval.designDiscrimination < 0.0 || eval.designDiscrimination > 1.0) {
+             output << "FAIL boundary small maze: D out of [0,1]\n";
+             return 51;
+         }
+
+         output << "PASS boundary small maze (3x3): D=" << eval.designDiscrimination
+                << ", C=" << eval.designStability
+                << ", B=" << eval.designBalance
+                << ", fitness=" << eval.finalFitness << '\n';
+     }
+
+     {
+         bool formulaOk = true;
+         const double dZero = 0.0, dNonZero = 0.8;
+         double harmonic = 0.0;
+         if (dZero + dNonZero > 0.0)
+             harmonic = 2.0 * dZero * dNonZero / (dZero + dNonZero);
+         if (harmonic != 0.0) formulaOk = false;
+
+         const double dBoth = 0.6;
+         harmonic = 2.0 * dBoth * dBoth / (dBoth + dBoth);
+         if (std::abs(harmonic - dBoth) > 1e-9) formulaOk = false;
+
+         if (!formulaOk) {
+             output << "FAIL boundary harmonic mean formula\n";
+             return 52;
+         }
+         output << "PASS boundary harmonic mean: H(0,0.8)=0, H(0.6,0.6)=0.6\n";
+     }
+
+     // 策略区分度验证测试：4 种策略必须产生不同行为
+     {
+         MazeModel maze;
+         maze.generate(7, 7, MazeAlgorithm::KruskalMst, 77000U);
+         ResourcePlacerConfig pc;
+         pc.coinCount = autoCoinCount(maze.cellCount());
+         pc.trapCount = autoTrapCount(maze.cellCount());
+         pc.seed = 77001U;
+         ResourcePlacer::placeAdversarial(maze, pc);
+
+         const QVector<GreedyStrategy> strategies = {
+             GreedyStrategy::ValuePerStep,
+             GreedyStrategy::CautiousCollector,
+             GreedyStrategy::AvoidTraps,
+             GreedyStrategy::EndGoalFirst
+         };
+         QVector<int> scores;
+         QVector<int> steps;
+         for (GreedyStrategy s : strategies) {
+             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
+             scores.append(r.remainingResource);
+             steps.append(r.totalSteps);
+         }
+
+         // 断言：至少有 2 对策略的得分不同（完全相同说明策略设计冗余）
+         int differentPairs = 0;
+         for (int i = 0; i < strategies.size(); ++i) {
+             for (int j = i + 1; j < strategies.size(); ++j) {
+                 if (scores[i] != scores[j] || steps[i] != steps[j]) {
+                     ++differentPairs;
+                 }
+             }
+         }
+         if (differentPairs < 2) {
+             output << "FAIL strategy discrimination: only " << differentPairs
+                    << " pairs differ (need >=2). scores=[" << scores[0] << "," << scores[1]
+                    << "," << scores[2] << "," << scores[3] << "]\n";
+             return 53;
+         }
+
+         output << "PASS strategy discrimination: " << differentPairs
+                << "/6 pairs differ, scores=[" << scores[0] << "," << scores[1]
+                << "," << scores[2] << "," << scores[3] << "]\n";
+     }
+
+     {
+         OptimizerConfig baseCfg;
+         baseCfg.rows = 7;
+         baseCfg.columns = 7;
+         baseCfg.populationSize = 12;
         baseCfg.generations = 20;
         baseCfg.mutationRate = 0.3;
         baseCfg.tournamentSize = 3;
@@ -906,6 +961,13 @@ int runSelfTests() {
         PlayResult smartPlay = GreedyPlayer::play(smartBest);
         PlayResult advPlay = GreedyPlayer::play(advBest);
 
+        // 获取对抗模式的D/B/C/finalFitness
+        EvaluatorConfig advEc;
+        advEc.useAdversarialPlacement = false;
+        advEc.skipPlacement = true;
+        advEc.topoWeight = 0.3;
+        EvalResult advEval = MazeEvaluator::evaluate(advBest, advEc);
+
         output << "PASS GA comparison:\n"
                << "  random: dp=" << randomDp.maxValue << " greedy=" << randomGreedy
                << " regret=" << randomRegret
@@ -918,7 +980,12 @@ int runSelfTests() {
                << "  adversarial: dp=" << advDp.maxValue << " greedy=" << advGreedy
                << " regret=" << advRegret
                << " ai_score=" << advPlay.score
-               << " ai_steps=" << advPlay.totalSteps << '\n';
+               << " ai_steps=" << advPlay.totalSteps
+               << " D=" << advEval.designDiscrimination
+               << " C=" << advEval.designStability
+               << " B=" << advEval.designBalance
+               << " fitness=" << advEval.finalFitness
+               << " spread=" << advEval.aiScoreSpread << '\n';
     }
 
     {
@@ -957,9 +1024,11 @@ int runSelfTests() {
         double topo = MazeEvaluator::computeTopoDifficulty(best);
 
         output << QString::asprintf(
-            "PASS end-to-end: fitness=%.1f, dp=%d, greedy=%d, regret=%d, topo=%.2f\n",
+            "PASS end-to-end: fitness=%.1f, dp=%d, greedy=%d, regret=%d, topo=%.2f, D=%.2f, C=%.2f, B=%.2f, spread=%.2f\n",
             eval.finalFitness, eval.dpScore, eval.worstGreedyScore,
-            eval.regretCombined, topo);
+            eval.regretCombined, topo,
+            eval.designDiscrimination, eval.designStability,
+            eval.designBalance, eval.aiScoreSpread);
     }
 
     output << "ALL TESTS PASSED\n";

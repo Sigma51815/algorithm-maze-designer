@@ -157,7 +157,7 @@ double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
         int worstGreedy = std::numeric_limits<int>::max();
         const QVector<GreedyStrategy> strategies = {
             GreedyStrategy::ValuePerStep,
-            GreedyStrategy::NearestFirst,
+            GreedyStrategy::CautiousCollector,
             GreedyStrategy::AvoidTraps,
             GreedyStrategy::EndGoalFirst
         };

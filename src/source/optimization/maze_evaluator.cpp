@@ -8,6 +8,22 @@
 
 namespace {
 
+constexpr double kStddevNorm   = 0.22;
+constexpr double kRangeNorm    = 0.55;
+constexpr double kBalanceIdeal = 0.45;
+constexpr double kBalanceTol   = 0.30;
+
+constexpr double kWeightD = 0.55;
+constexpr double kWeightB = 0.30;
+constexpr double kWeightC = 0.15;
+
+static_assert(kStddevNorm > 0.0 && kStddevNorm <= 1.0);
+static_assert(kRangeNorm  > 0.0 && kRangeNorm  <= 1.0);
+static_assert(kBalanceIdeal >= 0.0 && kBalanceIdeal <= 1.0);
+static_assert(kBalanceTol > 0.0 && kBalanceTol <= 1.0);
+static_assert(kWeightD + kWeightB + kWeightC > 0.99 &&
+              kWeightD + kWeightB + kWeightC < 1.01);
+
 double clamp01(double value) {
     return std::clamp(value, 0.0, 1.0);
 }
@@ -75,7 +91,7 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
     {
         const QVector<GreedyStrategy> strategies = {
             GreedyStrategy::ValuePerStep,
-            GreedyStrategy::NearestFirst,
+            GreedyStrategy::CautiousCollector,
             GreedyStrategy::AvoidTraps,
             GreedyStrategy::EndGoalFirst
         };
@@ -86,8 +102,13 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         double worstHitRate = 0.0;
         double worstInefficiency = 0.0;
         int reachedCount = 0;
-        QVector<double> aiRatios;
-        QVector<double> aiResourceRatios;
+        // 存储每个AI的原始数据，供新公式使用
+        struct AiRaw {
+            int remainingResource = 0;
+            int totalSteps = 0;
+            bool reachedEnd = false;
+        };
+        QVector<AiRaw> aiRawResults;
         for (GreedyStrategy s : strategies) {
             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
             if (r.remainingResource < worst) {
@@ -109,14 +130,7 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
             if (ineff > worstInefficiency) worstInefficiency = ineff;
 
             if (r.reachedEnd) ++reachedCount;
-            const double stepRatio = r.totalSteps > 0
-                ? static_cast<double>(r.remainingResource) / r.totalSteps
-                : 0.0;
-            aiRatios.append(stepRatio);
-            const double resourceRatio = result.dpScore > 0
-                ? static_cast<double>(std::max(0, r.remainingResource)) / result.dpScore
-                : 0.0;
-            aiResourceRatios.append(clamp01(resourceRatio));
+            aiRawResults.append({r.remainingResource, r.totalSteps, r.reachedEnd});
         }
         result.worstGreedyScore = worst;
         result.bestGreedyScore = best;
@@ -125,39 +139,64 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         result.trapHitRate = worstHitRate;
         result.pathInefficiency = worstInefficiency;
 
-        const double meanRatio = meanOf(aiRatios);
-        const double ratioStddev = stddevOf(aiRatios, meanRatio);
-        const double meanResourceRatio = meanOf(aiResourceRatios);
-        const double resourceStddev = stddevOf(aiResourceRatios, meanResourceRatio);
+        // ── 新公式（Codex 对齐）：归一化AI得分 → D/B/C → 加权适应度 ──
+        // 理论最大效率 = dpScore / shortestPathLen（每步最优得分）
+        const double idealScore = (result.dpScore > 0 && shortestPathLen > 0)
+            ? static_cast<double>(result.dpScore) / shortestPathLen
+            : 1.0;
 
-        // Cross-validation proxy for design groups:
-        // D: distinguish AI players, C: avoid pathological/no-finish maps,
-        // B: keep the maze challenging but still playable.
-        result.designDiscrimination = clamp01(resourceStddev / 0.35);
-        result.designStability = clamp01(static_cast<double>(reachedCount) / strategies.size());
-        const double targetMeanRatio = 0.45;
-        const double targetSpread = 0.18;
-        result.designBalance = clamp01(1.0
-            - std::abs(meanResourceRatio - targetMeanRatio) / targetSpread);
-        const double geometric = std::cbrt(std::max(0.0,
-            result.designDiscrimination * result.designStability * result.designBalance));
-        result.designGroupScore = 60.0 + geometric * 40.0;
+        QVector<double> normalizedScores;
+        for (const auto &ai : aiRawResults) {
+            double ns = 0.0;
+            if (idealScore > 0 && ai.totalSteps > 0 && ai.reachedEnd) {
+                double aiScore = static_cast<double>(std::max(0, ai.remainingResource))
+                    / ai.totalSteps;
+                ns = clamp01(aiScore / idealScore);
+            }
+            // 未到终点或步数为0 → 0分（防止"全员失败=好迷宫"）
+            normalizedScores.append(ns);
+        }
+
+        const double nsMean = meanOf(normalizedScores);
+        const double nsStddev = stddevOf(normalizedScores, nsMean);
+        const double nsMin = *std::min_element(normalizedScores.begin(),
+                                                normalizedScores.end());
+        const double nsMax = *std::max_element(normalizedScores.begin(),
+                                                normalizedScores.end());
+        const double nsRange = nsMax - nsMin;
+
+        const double dStddev = clamp01(nsStddev / kStddevNorm);
+        const double dRange  = clamp01(nsRange  / kRangeNorm);
+        if (dStddev + dRange > 0.0) {
+            result.designDiscrimination =
+                2.0 * dStddev * dRange / (dStddev + dRange);
+        } else {
+            result.designDiscrimination = 0.0;
+        }
+
+        // C: 可完成性 — 到达终点的AI比例
+        result.designStability = clamp01(
+            static_cast<double>(reachedCount) / strategies.size());
+
+        result.designBalance = clamp01(
+            1.0 - std::abs(nsMean - kBalanceIdeal) / kBalanceTol);
+
+        if (result.designStability <= 0.0) {
+            result.finalFitness = 0.0;
+        } else {
+            const double dTerm = std::pow(std::max(result.designDiscrimination, 0.001), kWeightD);
+            const double bTerm = std::pow(std::max(result.designBalance, 0.001), kWeightB);
+            const double cTerm = std::pow(std::max(result.designStability, 0.001), kWeightC);
+            result.finalFitness = 100.0 * dTerm * bTerm * cTerm;
+        }
+        result.designGroupScore = result.finalFitness;
+
+        // 诊断字段
+        result.meanAIScoreRatio = nsMean;
+        result.aiScoreSpread = nsRange;
     }
     result.regretGreedy = result.dpScore - result.worstGreedyScore;
-
-    if (config.evaluateAgainstRL) {
-        RLPlayer rlPlayer;
-        rlPlayer.trainOnMaze(maze, config.rlConfig);
-        RLPlayResult rlResult = rlPlayer.play(maze, config.rlConfig);
-        result.rlScore = rlResult.totalResource;
-        result.regretRL = result.dpScore - result.rlScore;
-    }
-
-    int worstAI = result.worstGreedyScore;
-    if (config.evaluateAgainstRL) {
-        worstAI = std::min(worstAI, result.rlScore);
-    }
-    result.regretCombined = result.dpScore - worstAI;
+    result.regretCombined = result.regretGreedy;
 
     result.topoDifficulty = computeTopoDifficulty(maze);
 
@@ -211,7 +250,7 @@ int MazeEvaluator::evaluateGreedyWorst(const MazeModel &maze) {
     int worst = std::numeric_limits<int>::max();
     const QVector<GreedyStrategy> strategies = {
         GreedyStrategy::ValuePerStep,
-        GreedyStrategy::NearestFirst,
+        GreedyStrategy::CautiousCollector,
         GreedyStrategy::AvoidTraps,
         GreedyStrategy::EndGoalFirst
     };

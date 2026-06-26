@@ -5,7 +5,7 @@
 
 enum class GreedyStrategy {
     ValuePerStep,
-    NearestFirst,
+    CautiousCollector,
     AvoidTraps,
     EndGoalFirst
 };

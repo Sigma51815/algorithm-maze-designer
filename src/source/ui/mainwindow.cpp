@@ -374,7 +374,7 @@ void MainWindow::buildUi() {
     complexityLabel->setWordWrap(true);
     generationOuter->addWidget(complexityLabel);
 
-    optProgressLabel_ = new QLabel(QStringLiteral("GA 目标 = 迷宫组代理分（区分度D × 稳定性C × 均衡性B）"));
+    optProgressLabel_ = new QLabel(QStringLiteral("GA 目标 = 贪心AI得分区分度 + 难度适中（D⁰·⁵⁵ × B⁰·³⁰ × C⁰·¹⁵）"));
     optProgressLabel_->setObjectName(QStringLiteral("infoCard"));
     optProgressLabel_->setWordWrap(true);
     generationOuter->addWidget(optProgressLabel_);
@@ -1340,7 +1340,7 @@ void MainWindow::runOptimizer() {
     connect(optimizer, &MazeOptimizer::generationFinished, this,
             [this, cfg](const OptimizerStats &stats) {
                 optProgressLabel_->setText(
-                    QStringLiteral("第 %1 / %2 代  |  迷宫组代理分 %3  |  平均 %4<br/>"
+                    QStringLiteral("第 %1 / %2 代  |  适应度 %3  |  平均 %4<br/>"
                                    "DP最优 %5  |  Greedy %6  |  Regret %7")
                         .arg(stats.generation)
                         .arg(cfg.generations)
@@ -1376,7 +1376,7 @@ void MainWindow::runOptimizer() {
                 int worstGreedy = std::numeric_limits<int>::max();
                 const QVector<GreedyStrategy> strategies = {
                     GreedyStrategy::ValuePerStep,
-                    GreedyStrategy::NearestFirst,
+                    GreedyStrategy::CautiousCollector,
                     GreedyStrategy::AvoidTraps,
                     GreedyStrategy::EndGoalFirst
                 };
@@ -1411,10 +1411,14 @@ void MainWindow::runOptimizer() {
                             "<td>%7</td><td>%8</td></tr>"
                         "<tr><td>稳定性 C</td>"
                             "<td>%9</td><td>%10</td></tr>"
-                        "<tr><td>均衡性 B</td>"
+                        "<tr><td>难度适中 B</td>"
                             "<td>%11</td><td>%12</td></tr>"
-                        "<tr><td>迷宫组代理分</td>"
-                            "<td>%13</td><td style='color:#2E7D32'><b>%14</b></td></tr>"
+                        "<tr><td>AI得分均值比</td>"
+                            "<td>%13</td><td>%15</td></tr>"
+                        "<tr><td>AI得分极差</td>"
+                            "<td>%14</td><td>%16</td></tr>"
+                        "<tr><td><b>适应度 finalFitness</b></td>"
+                            "<td>%17</td><td style='color:#2E7D32'><b>%18</b></td></tr>"
                         "</table>")
                         .arg(before.coinMissRate * 100, 0, 'f', 1)
                         .arg(after.coinMissRate * 100, 0, 'f', 1)
@@ -1428,12 +1432,16 @@ void MainWindow::runOptimizer() {
                         .arg(after.designStability, 0, 'f', 2)
                         .arg(before.designBalance, 0, 'f', 2)
                         .arg(after.designBalance, 0, 'f', 2)
+                        .arg(before.meanAIScoreRatio, 0, 'f', 2)
+                        .arg(before.aiScoreSpread, 0, 'f', 2)
+                        .arg(after.meanAIScoreRatio, 0, 'f', 2)
+                        .arg(after.aiScoreSpread, 0, 'f', 2)
                         .arg(before.finalFitness, 0, 'f', 1)
                         .arg(after.finalFitness, 0, 'f', 1);
                     bool improved = after.finalFitness > before.finalFitness;
                     report += improved
-                        ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（迷宫组代理分提升）</b>")
-                        : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化未提升迷宫组代理分</b>");
+                        ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（适应度提升）</b>")
+                        : QStringLiteral("<br/><b style='color:#C62828'>✗ 优化未提升适应度</b>");
                     optCompareLabel_->setText(report);
                     optCompareLabel_->setVisible(true);
                 }
