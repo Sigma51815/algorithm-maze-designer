@@ -394,10 +394,10 @@ void MainWindow::buildUi() {
     panelLayout->addWidget(generationGroup);
 
     const QStringList complexityDescriptions{
-        QStringLiteral("分治  O(V) 时间 / O(log V) 空间\n递归拆分矩形区域，每次只连接两个子迷宫一次。结构分区明显。"),
-        QStringLiteral("Kruskal MST  O(E log E) 时间 / O(V+E) 空间\n随机边排序并用并查集防环。分支较均衡。"),
-        QStringLiteral("回溯 DFS  O(V+E) 时间 / O(V) 空间\n深入未访问邻格，遇到死路回退。长走廊较多。"),
-        QStringLiteral("BFS 分支限界  O(E log E) 时间 / O(E) 空间\n候选迷宫按深度层扩展，多次随机重启选最优。")};
+        QStringLiteral("分治  O(V) 时间 / O(V) 空间\n递归划分矩形区域，每次连接两个子迷宫一次；迷宫存储、校验与输出占 O(V)，递归栈均衡时约 O(log V)，最坏 O(V)。"),
+        QStringLiteral("随机 Kruskal / MST  O(E α(V)) 时间 / O(V+E) 空间\n候选墙边随机打乱后用并查集判连通，未连通则打通墙壁；网格图 E=O(V)，实际接近线性。若采用标准 Kruskal 排序边权，则时间为 O(E log E)。"),
+        QStringLiteral("回溯 DFS  O(V+E) 时间 / O(V) 空间\n从起点深入访问未访问邻格，遇到死路回退；每个房间访问一次，每条候选边检查常数次，网格图中近似 O(V)。"),
+        QStringLiteral("BFS / 分支限界  O(E log E) 时间 / O(V+E) 空间\n本实现用优先队列维护候选分支并做常数次随机重启；若改为普通队列 BFS，则为 O(V+E)。")};
     auto updateComplexity = [=](int index) {
         complexityLabel->setText(complexityDescriptions.value(index));
     };
