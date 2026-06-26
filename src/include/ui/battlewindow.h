@@ -57,6 +57,7 @@ public:
                  const BossResult &optimalResult,
                  int turnLimit,
                  int reviveCoins,
+                 DamageOverflowMode damageMode = DamageOverflowMode::NoOverflow,
                  QWidget *parent = nullptr);
 
 private:
@@ -67,6 +68,7 @@ private:
     QVector<int> cooldowns_;
     int turnLimit_ = 0;
     int reviveCoins_ = 0;
+    DamageOverflowMode damageMode_ = DamageOverflowMode::NoOverflow;
     int currentBoss_ = 0;
     int turn_ = 0;
     int autoStep_ = 0;

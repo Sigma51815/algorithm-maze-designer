@@ -47,6 +47,8 @@ private:
     QSpinBox *trapValueSpin_ = nullptr;
     QLineEdit *bossHealthEdit_ = nullptr;
     QLineEdit *skillsEdit_ = nullptr;
+    QComboBox *damageModeBox_ = nullptr;
+    QComboBox *roundLimitModeBox_ = nullptr;
     QPlainTextEdit *bossOutput_ = nullptr;
     QTimer *generationTimer_ = nullptr;
     QTimer *pathTimer_ = nullptr;
@@ -99,4 +101,6 @@ private:
     void stopOptimizer();
     [[nodiscard]] QVector<int> parseBossHealth(bool *ok = nullptr) const;
     [[nodiscard]] QVector<BossSkill> parseSkills(bool *ok = nullptr) const;
+    [[nodiscard]] DamageOverflowMode selectedDamageMode() const;
+    [[nodiscard]] int selectedRoundExtraTurns() const;
 };

@@ -479,8 +479,23 @@ void MainWindow::buildUi() {
     skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却;..."));
     skillsEdit_->setToolTip(QStringLiteral("如 普通攻击:5:0;重击:10:2"));
     skillsEdit_->setMinimumWidth(320);
+    damageModeBox_ = new QComboBox;
+    damageModeBox_->setObjectName(QStringLiteral("inputControl"));
+    damageModeBox_->addItem(QStringLiteral("伤害不溢出（测试口径）"),
+                            static_cast<int>(DamageOverflowMode::NoOverflow));
+    damageModeBox_->addItem(QStringLiteral("伤害溢出（PPT口径）"),
+                            static_cast<int>(DamageOverflowMode::Overflow));
+    damageModeBox_->setToolTip(QStringLiteral("不溢出：多余伤害不传递；溢出：多余伤害顺延到下一个 BOSS"));
+    roundLimitModeBox_ = new QComboBox;
+    roundLimitModeBox_->setObjectName(QStringLiteral("inputControl"));
+    roundLimitModeBox_->addItem(QStringLiteral("最小回合数"), 0);
+    roundLimitModeBox_->addItem(QStringLiteral("最小回合数 + 1"), 1);
+    roundLimitModeBox_->setCurrentIndex(1);
+    roundLimitModeBox_->setToolTip(QStringLiteral("限定回合数只能为最小回合数或最小回合数 + 1"));
     bossForm->addRow(QStringLiteral("血量"), bossHealthEdit_);
     bossForm->addRow(QStringLiteral("技能"), skillsEdit_);
+    bossForm->addRow(QStringLiteral("伤害模式"), damageModeBox_);
+    bossForm->addRow(QStringLiteral("限定回合"), roundLimitModeBox_);
     bossLayout->addLayout(bossForm);
     auto *bossButtons = new QHBoxLayout;
     bossButtons->setSpacing(8);
@@ -825,6 +840,24 @@ QVector<BossSkill> MainWindow::parseSkills(bool *ok) const {
     return valid ? skills : QVector<BossSkill>{};
 }
 
+DamageOverflowMode MainWindow::selectedDamageMode() const {
+    if (!damageModeBox_) {
+        return DamageOverflowMode::NoOverflow;
+    }
+    bool ok = false;
+    const int value = damageModeBox_->currentData().toInt(&ok);
+    return ok ? static_cast<DamageOverflowMode>(value) : DamageOverflowMode::NoOverflow;
+}
+
+int MainWindow::selectedRoundExtraTurns() const {
+    if (!roundLimitModeBox_) {
+        return 1;
+    }
+    bool ok = false;
+    const int value = roundLimitModeBox_->currentData().toInt(&ok);
+    return ok ? std::clamp(value, 0, 1) : 1;
+}
+
 void MainWindow::solveBossBattle() {
     bool healthOk = false;
     bool skillsOk = false;
@@ -836,9 +869,11 @@ void MainWindow::solveBossBattle() {
         return;
     }
 
-    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
+    const DamageOverflowMode damageMode = selectedDamageMode();
+    lastBossResult_ = BossSolver::solveWithMaze(
+        maze_, health, skills, selectedRoundExtraTurns(), damageMode);
     if (!lastBossResult_.solved
-        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
+        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence, damageMode)) {
         bossOutput_->setPlainText(QStringLiteral("未找到可验证的技能序列。"));
         return;
     }
@@ -847,6 +882,9 @@ void MainWindow::solveBossBattle() {
     for (int skillIndex : lastBossResult_.skillSequence) {
         sequenceNames.append(skills[skillIndex].name);
     }
+    const QString damageModeName = damageMode == DamageOverflowMode::Overflow
+        ? QStringLiteral("伤害溢出")
+        : QStringLiteral("伤害不溢出");
     bossOutput_->setPlainText(
         QStringLiteral(
             "── 求解结果 ──────────────────────\n"
@@ -854,14 +892,16 @@ void MainWindow::solveBossBattle() {
             "限定回合数    %2\n"
             "复活金币      %3\n"
             "DP 最大金币   %4\n"
+            "伤害模式      %5\n"
             "────────────────────────────────\n"
-            "最优序列      %5\n"
+            "最优序列      %6\n"
             "────────────────────────────────\n"
-            "搜索展开 %6    剪枝 %7")
+            "搜索展开 %7    剪枝 %8")
             .arg(lastBossResult_.minimumTurns)
             .arg(lastBossResult_.roundLimit)
             .arg(lastBossResult_.coinConsumption)
             .arg(lastBossResult_.maxCoinsFromDP)
+            .arg(damageModeName)
             .arg(sequenceNames.join(QStringLiteral(" → ")))
             .arg(lastBossResult_.expandedStates)
             .arg(lastBossResult_.prunedStates));
@@ -878,9 +918,11 @@ void MainWindow::showBattleAnimation() {
         return;
     }
 
-    BossFullResult fullResult = BossSolver::solveWithMaze(maze_, health, skills, 2);
+    const DamageOverflowMode damageMode = selectedDamageMode();
+    BossFullResult fullResult = BossSolver::solveWithMaze(
+        maze_, health, skills, selectedRoundExtraTurns(), damageMode);
     if (!fullResult.solved
-        || !BossSolver::verify(health, skills, fullResult.skillSequence)) {
+        || !BossSolver::verify(health, skills, fullResult.skillSequence, damageMode)) {
         QMessageBox::warning(this, QStringLiteral("无法开始战斗"),
                              QStringLiteral("当前参数没有得到可验证的技能序列。"));
         return;
@@ -897,7 +939,7 @@ void MainWindow::showBattleAnimation() {
     auto *battleWindow = new BattleWindow(
         health, skills, basicResult,
         fullResult.roundLimit,
-        fullResult.coinConsumption, this);
+        fullResult.coinConsumption, damageMode, this);
     battleWindow->show();
     battleWindow->raise();
     battleWindow->activateWindow();
@@ -1182,9 +1224,11 @@ void MainWindow::exportBossBattleJson() {
         return;
     }
 
-    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
+    const DamageOverflowMode damageMode = selectedDamageMode();
+    lastBossResult_ = BossSolver::solveWithMaze(
+        maze_, health, skills, selectedRoundExtraTurns(), damageMode);
     if (!lastBossResult_.solved
-        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence)) {
+        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence, damageMode)) {
         QMessageBox::warning(this, QStringLiteral("无法导出"),
                              QStringLiteral("当前参数没有可验证的最优技能序列。"));
         return;
@@ -1223,8 +1267,11 @@ void MainWindow::exportMaze() {
                              QStringLiteral("请先填写正确的 BOSS 血量与玩家技能。"));
         return;
     }
-    lastBossResult_ = BossSolver::solveWithMaze(maze_, health, skills, 2);
-    if (!lastBossResult_.solved) {
+    const DamageOverflowMode damageMode = selectedDamageMode();
+    lastBossResult_ = BossSolver::solveWithMaze(
+        maze_, health, skills, selectedRoundExtraTurns(), damageMode);
+    if (!lastBossResult_.solved
+        || !BossSolver::verify(health, skills, lastBossResult_.skillSequence, damageMode)) {
         QMessageBox::warning(this, QStringLiteral("无法导出"),
                              QStringLiteral("当前 BOSS 参数没有可行技能序列。"));
         return;

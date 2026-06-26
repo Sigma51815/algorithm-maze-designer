@@ -115,7 +115,8 @@ int bruteForceResourceMaximum(const MazeModel &maze) {
 }
 
 int bruteForceBossTurns(const QVector<int> &initialHealth,
-                        const QVector<BossSkill> &skills) {
+                        const QVector<BossSkill> &skills,
+                        DamageOverflowMode damageMode = DamageOverflowMode::NoOverflow) {
     struct State {
         QVector<int> health;
         QVector<int> cooldowns;
@@ -155,7 +156,16 @@ int bruteForceBossTurns(const QVector<int> &initialHealth,
                 continue;
             }
             State next = state;
-            next.health[boss] -= skills[skillIndex].damage;
+            if (damageMode == DamageOverflowMode::Overflow) {
+                int remainingDamage = skills[skillIndex].damage;
+                for (int target = boss; target < next.health.size() && remainingDamage > 0; ++target) {
+                    const int dealt = std::min(next.health[target], remainingDamage);
+                    next.health[target] -= dealt;
+                    remainingDamage -= dealt;
+                }
+            } else {
+                next.health[boss] -= skills[skillIndex].damage;
+            }
             for (int &cooldown : next.cooldowns) {
                 cooldown = std::max(0, cooldown - 1);
             }
@@ -293,21 +303,44 @@ int runSelfTests() {
            << ", pruned=" << bossResult.prunedStates << '\n';
 
     {
+        const QVector<int> overflowBosses{5, 10};
+        const QVector<BossSkill> overflowSkills{{QStringLiteral("Strike"), 8, 0}};
+        const BossResult noOverflow = BossSolver::solve(
+            overflowBosses, overflowSkills, DamageOverflowMode::NoOverflow);
+        const BossResult overflow = BossSolver::solve(
+            overflowBosses, overflowSkills, DamageOverflowMode::Overflow);
+        if (!noOverflow.solved || !overflow.solved
+            || noOverflow.minimumTurns != 3 || overflow.minimumTurns != 2
+            || !BossSolver::verify(overflowBosses, overflowSkills,
+                                   noOverflow.skillSequence, DamageOverflowMode::NoOverflow)
+            || !BossSolver::verify(overflowBosses, overflowSkills,
+                                   overflow.skillSequence, DamageOverflowMode::Overflow)) {
+            output << "FAIL boss damage overflow modes: no-overflow="
+                   << noOverflow.minimumTurns << ", overflow=" << overflow.minimumTurns << '\n';
+            return 34;
+        }
+        output << "PASS boss damage overflow modes: no-overflow="
+               << noOverflow.minimumTurns << ", overflow=" << overflow.minimumTurns << '\n';
+    }
+
+    {
         MazeModel bossMaze;
         bossMaze.generate(5, 5, MazeAlgorithm::KruskalMst, 50000U);
         bossMaze.placeResources(autoCoinCount(bossMaze.cellCount()), autoTrapCount(bossMaze.cellCount()), 50001U);
-        BossFullResult fullResult = BossSolver::solveWithMaze(bossMaze, bosses, skills, 2);
+        BossFullResult fullResult = BossSolver::solveWithMaze(bossMaze, bosses, skills);
         if (!fullResult.solved) {
             output << "FAIL solveWithMaze: not solved\n";
             return 30;
         }
-        if (fullResult.roundLimit != fullResult.minimumTurns + 2) {
+        if (fullResult.roundLimit != fullResult.minimumTurns + 1) {
             output << "FAIL solveWithMaze: roundLimit=" << fullResult.roundLimit
-                   << " expected=" << (fullResult.minimumTurns + 2) << '\n';
+                   << " expected=" << (fullResult.minimumTurns + 1) << '\n';
             return 31;
         }
-        if (fullResult.coinConsumption < 1) {
-            output << "FAIL solveWithMaze: coinConsumption=" << fullResult.coinConsumption << '\n';
+        const int expectedCoinConsumption = std::max(1, (fullResult.maxCoinsFromDP + 1) / 2);
+        if (fullResult.coinConsumption != expectedCoinConsumption) {
+            output << "FAIL solveWithMaze: coinConsumption=" << fullResult.coinConsumption
+                   << " expected=" << expectedCoinConsumption << '\n';
             return 32;
         }
         if (fullResult.maxCoinsFromDP <= 0) {
@@ -1078,7 +1111,7 @@ int main(int argc, char *argv[]) {
                                         {QStringLiteral("大招"), 18, 4}};
         const BossResult result = BossSolver::solve(health, skills);
         auto *battle = new BattleWindow(
-            health, skills, result, result.minimumTurns + 2, 100);
+            health, skills, result, result.minimumTurns + 1, 100);
         battle->show();
         if (battleAnimationTest) {
             QTimer::singleShot(100, battle, [battle] {

@@ -246,13 +246,15 @@ BattleWindow::BattleWindow(const QVector<int> &bossHealth,
                            const BossResult &optimalResult,
                            int turnLimit,
                            int reviveCoins,
+                           DamageOverflowMode damageMode,
                            QWidget *parent)
     : QMainWindow(parent),
       initialHealth_(bossHealth),
       skills_(skills),
       optimalResult_(optimalResult),
       turnLimit_(turnLimit),
-      reviveCoins_(reviveCoins) {
+      reviveCoins_(reviveCoins),
+      damageMode_(damageMode) {
     setAttribute(Qt::WA_DeleteOnClose);
     buildUi();
     resetBattle();
@@ -354,7 +356,16 @@ void BattleWindow::useSkill(int skillIndex) {
         return;
     }
     currentBoss_ = firstLivingBoss();
-    const int damage = std::min(skills_[skillIndex].damage, currentHealth_[currentBoss_]);
+    int damage = std::min(skills_[skillIndex].damage, currentHealth_[currentBoss_]);
+    if (damageMode_ == DamageOverflowMode::Overflow) {
+        damage = 0;
+        int remainingDamage = skills_[skillIndex].damage;
+        for (int target = currentBoss_; target < currentHealth_.size() && remainingDamage > 0; ++target) {
+            const int dealt = std::min(currentHealth_[target], remainingDamage);
+            damage += dealt;
+            remainingDamage -= dealt;
+        }
+    }
     animating_ = true;
     messageLabel_->setText(QStringLiteral("算法精灵使用了 %1！").arg(skills_[skillIndex].name));
     refreshUi();
@@ -363,7 +374,16 @@ void BattleWindow::useSkill(int skillIndex) {
 }
 
 void BattleWindow::finishTurn(int skillIndex, int damage) {
-    currentHealth_[currentBoss_] -= damage;
+    if (damageMode_ == DamageOverflowMode::Overflow) {
+        int remainingDamage = damage;
+        for (int target = currentBoss_; target < currentHealth_.size() && remainingDamage > 0; ++target) {
+            const int dealt = std::min(currentHealth_[target], remainingDamage);
+            currentHealth_[target] -= dealt;
+            remainingDamage -= dealt;
+        }
+    } else {
+        currentHealth_[currentBoss_] -= damage;
+    }
     ++turn_;
     for (int &cooldown : cooldowns_) {
         cooldown = std::max(0, cooldown - 1);

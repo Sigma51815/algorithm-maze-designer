@@ -35,9 +35,19 @@ QString stateKey(const QVector<int> &health, const QVector<int> &cooldowns) {
 void applySkill(QVector<int> &health,
                 QVector<int> &cooldowns,
                 const QVector<BossSkill> &skills,
-                int skillIndex) {
+                int skillIndex,
+                DamageOverflowMode damageMode) {
     const int boss = firstLivingBoss(health);
-    health[boss] -= skills[skillIndex].damage;
+    if (damageMode == DamageOverflowMode::Overflow) {
+        int remainingDamage = skills[skillIndex].damage;
+        for (int target = boss; target < health.size() && remainingDamage > 0; ++target) {
+            const int dealt = std::min(health[target], remainingDamage);
+            health[target] -= dealt;
+            remainingDamage -= dealt;
+        }
+    } else {
+        health[boss] -= skills[skillIndex].damage;
+    }
     for (int &cooldown : cooldowns) {
         cooldown = std::max(0, cooldown - 1);
     }
@@ -75,7 +85,9 @@ int optimisticTurnLowerBound(int remainingHealth,
 
 } // namespace
 
-BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossSkill> &skills) {
+BossResult BossSolver::solve(const QVector<int> &bossHealth,
+                             const QVector<BossSkill> &skills,
+                             DamageOverflowMode damageMode) {
     BossResult result;
     if (bossHealth.isEmpty()) {
         result.solved = true;
@@ -113,7 +125,7 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossS
             return result;
         }
         bestSequence.append(chosen);
-        applySkill(greedyHealth, greedyCooldowns, skills, chosen);
+        applySkill(greedyHealth, greedyCooldowns, skills, chosen, damageMode);
     }
 
     int bestTurns = bestSequence.size();
@@ -163,7 +175,7 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossS
             for (int skillIndex : choices) {
                 QVector<int> nextHealth = health;
                 QVector<int> nextCooldowns = cooldowns;
-                applySkill(nextHealth, nextCooldowns, skills, skillIndex);
+                applySkill(nextHealth, nextCooldowns, skills, skillIndex, damageMode);
                 currentSequence.append(skillIndex);
                 search(std::move(nextHealth), std::move(nextCooldowns), depth + 1);
                 currentSequence.removeLast();
@@ -179,7 +191,8 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth, const QVector<BossS
 
 bool BossSolver::verify(const QVector<int> &bossHealth,
                         const QVector<BossSkill> &skills,
-                        const QVector<int> &sequence) {
+                        const QVector<int> &sequence,
+                        DamageOverflowMode damageMode) {
     QVector<int> health = bossHealth;
     QVector<int> cooldowns(skills.size(), 0);
     for (int skillIndex : sequence) {
@@ -187,7 +200,7 @@ bool BossSolver::verify(const QVector<int> &bossHealth,
             || cooldowns[skillIndex] != 0) {
             return false;
         }
-        applySkill(health, cooldowns, skills, skillIndex);
+        applySkill(health, cooldowns, skills, skillIndex, damageMode);
     }
     return firstLivingBoss(health) < 0;
 }
@@ -195,9 +208,10 @@ bool BossSolver::verify(const QVector<int> &bossHealth,
 BossFullResult BossSolver::solveWithMaze(const MazeModel &maze,
                                           const QVector<int> &bossHealth,
                                           const QVector<BossSkill> &skills,
-                                          int extraTurns) {
+                                          int extraTurns,
+                                          DamageOverflowMode damageMode) {
     BossFullResult result;
-    BossResult basic = solve(bossHealth, skills);
+    BossResult basic = solve(bossHealth, skills, damageMode);
     if (!basic.solved) return result;
 
     result.solved = true;
@@ -207,10 +221,15 @@ BossFullResult BossSolver::solveWithMaze(const MazeModel &maze,
     result.prunedStates = basic.prunedStates;
 
     ResourcePlan dp = maze.optimalResourceWalk();
-    result.maxCoinsFromDP = dp.maxValue;
+    int collectedCoins = 0;
+    for (int cell : dp.collectedCells) {
+        collectedCoins += std::max(0, maze.resourceAt(cell));
+    }
+    result.maxCoinsFromDP = collectedCoins;
 
-    result.roundLimit = basic.minimumTurns + extraTurns;
-    result.coinConsumption = std::max(1, dp.maxValue - 1);
+    const int clampedExtraTurns = std::clamp(extraTurns, 0, 1);
+    result.roundLimit = basic.minimumTurns + clampedExtraTurns;
+    result.coinConsumption = std::max(1, (collectedCoins + 1) / 2);
 
     return result;
 }
