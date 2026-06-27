@@ -23,6 +23,8 @@ struct EvalResult {
     // 诊断字段：归一化AI得分的均值与极差（仅新公式下有意义）
     double meanAIScoreRatio = 0.0;
     double aiScoreSpread = 0.0;
+    int evaluatedAiCount = 0;
+    int reachedAiCount = 0;
 };
 
 struct EvaluatorConfig {

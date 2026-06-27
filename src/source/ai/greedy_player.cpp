@@ -98,7 +98,8 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
         // ---- 贪心目标选择 + 直接踏入（纯 3×3，无 BFS）----
         int nextCell = -1;
 
-        if (strategy == GreedyStrategy::EndGoalFirst) {
+        if (strategy == GreedyStrategy::EndGoalFirst
+            || strategy == GreedyStrategy::SafeGoalFirst) {
             // 朝终点方向：选 4 邻居中曼哈顿距离最小的
             int bestDist = std::numeric_limits<int>::max();
             int bestVisits = std::numeric_limits<int>::max();
@@ -107,6 +108,12 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
                 int nc = vc.mazeCell % cols;
                 int md = std::abs(nr - endRow) + std::abs(nc - endCol);
                 int vis = visitCount.value(vc.mazeCell, 0);
+                if (strategy == GreedyStrategy::SafeGoalFirst && vc.value < 0) {
+                    md += 1000;
+                }
+                if (strategy == GreedyStrategy::SafeGoalFirst && vc.value > 0) {
+                    md -= 1;
+                }
                 if (md < bestDist || (md == bestDist && vis < bestVisits)) {
                     bestDist = md;
                     bestVisits = vis;
@@ -119,10 +126,16 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
             bool foundResource = false;
             for (const auto &vc : visible) {
                 if (vc.value == 0) continue;
+                if (strategy == GreedyStrategy::LeastVisitedExplorer) continue;
                 if (vc.value < 0 && strategy == GreedyStrategy::AvoidTraps) continue;
-                if (vc.value < 0 && strategy != GreedyStrategy::ValuePerStep) continue;
+                if (vc.value < 0
+                    && strategy != GreedyStrategy::ValuePerStep
+                    && strategy != GreedyStrategy::RiskyGoalCollector) continue;
                 foundResource = true;
                 double sc = 0.0;
+                int md = std::abs(vc.mazeCell / cols - endRow)
+                       + std::abs(vc.mazeCell % cols - endCol);
+                int visits = visitCount.value(vc.mazeCell, 0);
                 switch (strategy) {
                 case GreedyStrategy::ValuePerStep:
                     sc = static_cast<double>(vc.value) / vc.dist;  // dist=2, so ∝ value
@@ -132,6 +145,12 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
                     break;
                 case GreedyStrategy::AvoidTraps:
                     sc = static_cast<double>(vc.value) / vc.dist;
+                    break;
+                case GreedyStrategy::CoinCollector:
+                    sc = vc.value * 2.0 - visits;
+                    break;
+                case GreedyStrategy::RiskyGoalCollector:
+                    sc = vc.value - 6.0 * md - 4.0 * visits;
                     break;
                 default:
                     break;
@@ -150,7 +169,8 @@ PlayResult GreedyPlayer::play(const MazeModel &maze,
                     int visits = visitCount.value(vc.mazeCell, 0);
                     // CautiousCollector 探索时偏好朝终点方向（曼哈顿最近）
                     // 其他策略纯最少访问（迭代顺序决定 tie-break）
-                    if (strategy == GreedyStrategy::CautiousCollector) {
+                    if (strategy == GreedyStrategy::CautiousCollector
+                        || strategy == GreedyStrategy::RiskyGoalCollector) {
                         int md = std::abs(vc.mazeCell / cols - endRow)
                                + std::abs(vc.mazeCell % cols - endCol);
                         if (visits < leastVisited

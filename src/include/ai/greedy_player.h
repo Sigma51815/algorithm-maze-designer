@@ -7,7 +7,11 @@ enum class GreedyStrategy {
     ValuePerStep,
     CautiousCollector,
     AvoidTraps,
-    EndGoalFirst
+    EndGoalFirst,
+    LeastVisitedExplorer,
+    CoinCollector,
+    SafeGoalFirst,
+    RiskyGoalCollector
 };
 
 struct PlayResult {

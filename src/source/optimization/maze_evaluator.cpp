@@ -47,6 +47,20 @@ double stddevOf(const QVector<double> &values, double mean) {
     return std::sqrt(sum / values.size());
 }
 
+const QVector<GreedyStrategy> &evaluatorStrategies() {
+    static const QVector<GreedyStrategy> strategies = {
+        GreedyStrategy::ValuePerStep,
+        GreedyStrategy::CautiousCollector,
+        GreedyStrategy::AvoidTraps,
+        GreedyStrategy::EndGoalFirst,
+        GreedyStrategy::LeastVisitedExplorer,
+        GreedyStrategy::CoinCollector,
+        GreedyStrategy::SafeGoalFirst,
+        GreedyStrategy::RiskyGoalCollector
+    };
+    return strategies;
+}
+
 } // namespace
 
 // 适应度评估入口：可先放置资源，再运行多种贪心 AI，最后计算 D/B/C 和 finalFitness。
@@ -92,15 +106,10 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
     }
 
     {
-        const QVector<GreedyStrategy> strategies = {
-            GreedyStrategy::ValuePerStep,
-            GreedyStrategy::CautiousCollector,
-            GreedyStrategy::AvoidTraps,
-            GreedyStrategy::EndGoalFirst
-        };
+        const QVector<GreedyStrategy> &strategies = evaluatorStrategies();
         int worst = std::numeric_limits<int>::max();
         int best = std::numeric_limits<int>::min();
-        double worstAIScore = 0.0;
+        double worstAIScore = std::numeric_limits<double>::infinity();
         double worstMissRate = 0.0;
         double worstHitRate = 0.0;
         double worstInefficiency = 0.0;
@@ -109,16 +118,15 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         struct AiRaw {
             int remainingResource = 0;
             int totalSteps = 0;
+            double score = 0.0;
             bool reachedEnd = false;
         };
         QVector<AiRaw> aiRawResults;
         for (GreedyStrategy s : strategies) {
             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
-            if (r.remainingResource < worst) {
+            if (r.score < worstAIScore) {
                 worst = r.remainingResource;
-                worstAIScore = r.totalSteps > 0
-                    ? static_cast<double>(r.remainingResource) / r.totalSteps
-                    : 0.0;
+                worstAIScore = r.score;
             }
             best = std::max(best, r.remainingResource);
 
@@ -133,14 +141,16 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
             if (ineff > worstInefficiency) worstInefficiency = ineff;
 
             if (r.reachedEnd) ++reachedCount;
-            aiRawResults.append({r.remainingResource, r.totalSteps, r.reachedEnd});
+            aiRawResults.append({r.remainingResource, r.totalSteps, r.score, r.reachedEnd});
         }
         result.worstGreedyScore = worst;
         result.bestGreedyScore = best;
-        result.worstAIScore = worstAIScore;
+        result.worstAIScore = std::isfinite(worstAIScore) ? worstAIScore : 0.0;
         result.coinMissRate = worstMissRate;
         result.trapHitRate = worstHitRate;
         result.pathInefficiency = worstInefficiency;
+        result.evaluatedAiCount = strategies.size();
+        result.reachedAiCount = reachedCount;
 
         // ── 新公式（Codex 对齐）：归一化AI得分 → D/B/C → 加权适应度 ──
         // 理论最大效率 = dpScore / shortestPathLen（每步最优得分）
@@ -152,9 +162,7 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         for (const auto &ai : aiRawResults) {
             double ns = 0.0;
             if (idealScore > 0 && ai.totalSteps > 0 && ai.reachedEnd) {
-                double aiScore = static_cast<double>(std::max(0, ai.remainingResource))
-                    / ai.totalSteps;
-                ns = clamp01(aiScore / idealScore);
+                ns = clamp01(std::max(0.0, ai.score) / idealScore);
             }
             // 未到终点或步数为0 → 0分（防止"全员失败=好迷宫"）
             normalizedScores.append(ns);
@@ -167,12 +175,21 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         const double nsMax = *std::max_element(normalizedScores.begin(),
                                                 normalizedScores.end());
         const double nsRange = nsMax - nsMin;
+        QVector<double> sortedScores = normalizedScores;
+        std::sort(sortedScores.begin(), sortedScores.end());
+        int significantGaps = 0;
+        for (int i = 1; i < sortedScores.size(); ++i) {
+            if (sortedScores[i] - sortedScores[i - 1] >= 0.05) {
+                ++significantGaps;
+            }
+        }
 
         const double dStddev = clamp01(nsStddev / kStddevNorm);
         const double dRange  = clamp01(nsRange  / kRangeNorm);
+        const double dLayers = clamp01(static_cast<double>(significantGaps) / 3.0);
         if (dStddev + dRange > 0.0) {
-            result.designDiscrimination =
-                2.0 * dStddev * dRange / (dStddev + dRange);
+            const double spreadCore = 2.0 * dStddev * dRange / (dStddev + dRange);
+            result.designDiscrimination = std::sqrt(spreadCore * dLayers);
         } else {
             result.designDiscrimination = 0.0;
         }
@@ -251,15 +268,14 @@ double MazeEvaluator::computeTopoDifficulty(const MazeModel &maze) {
 
 int MazeEvaluator::evaluateGreedyWorst(const MazeModel &maze) {
     int worst = std::numeric_limits<int>::max();
-    const QVector<GreedyStrategy> strategies = {
-        GreedyStrategy::ValuePerStep,
-        GreedyStrategy::CautiousCollector,
-        GreedyStrategy::AvoidTraps,
-        GreedyStrategy::EndGoalFirst
-    };
+    double worstScore = std::numeric_limits<double>::infinity();
+    const QVector<GreedyStrategy> &strategies = evaluatorStrategies();
     for (GreedyStrategy s : strategies) {
         PlayResult result = GreedyPlayer::play(maze, {}, {}, 0, s);
-        worst = std::min(worst, result.remainingResource);
+        if (result.score < worstScore) {
+            worstScore = result.score;
+            worst = result.remainingResource;
+        }
     }
     return worst;
 }

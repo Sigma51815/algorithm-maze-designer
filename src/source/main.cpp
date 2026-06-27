@@ -813,6 +813,23 @@ int runSelfTests() {
             output << "FAIL enhanced fitness: aiScoreSpread out of [0,1]\n";
             return 39;
         }
+        if (eval.evaluatedAiCount != 8) {
+            output << "FAIL enhanced fitness: expected 8 evaluator AI profiles, got "
+                   << eval.evaluatedAiCount << '\n';
+            return 54;
+        }
+        if (eval.reachedAiCount < 0 || eval.reachedAiCount > eval.evaluatedAiCount) {
+            output << "FAIL enhanced fitness: reached AI count out of range\n";
+            return 55;
+        }
+        if (eval.evaluatedAiCount > 0) {
+            const double expectedStability =
+                static_cast<double>(eval.reachedAiCount) / eval.evaluatedAiCount;
+            if (std::abs(eval.designStability - expectedStability) > 1e-9) {
+                output << "FAIL enhanced fitness: C does not match reached/evaluated AI count\n";
+                return 56;
+            }
+        }
 
         output << "PASS enhanced fitness: dp=" << eval.dpScore
                << ", regret=" << eval.regretGreedy

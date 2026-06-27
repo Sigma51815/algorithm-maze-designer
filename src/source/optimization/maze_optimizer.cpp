@@ -157,17 +157,7 @@ double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
         ResourcePlan dpPlan = chrom.maze.optimalResourceWalk();
         chrom.dpScore = dpPlan.maxValue;
 
-        int worstGreedy = std::numeric_limits<int>::max();
-        const QVector<GreedyStrategy> strategies = {
-            GreedyStrategy::ValuePerStep,
-            GreedyStrategy::CautiousCollector,
-            GreedyStrategy::AvoidTraps,
-            GreedyStrategy::EndGoalFirst
-        };
-        for (GreedyStrategy s : strategies) {
-            PlayResult result = GreedyPlayer::play(chrom.maze, {}, {}, 0, s);
-            worstGreedy = std::min(worstGreedy, result.remainingResource);
-        }
+        int worstGreedy = MazeEvaluator::evaluateGreedyWorst(chrom.maze);
         chrom.greedyScore = worstGreedy;
         chrom.fitness = static_cast<double>(chrom.dpScore - chrom.greedyScore);
     }

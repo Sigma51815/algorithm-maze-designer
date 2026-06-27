@@ -1377,17 +1377,7 @@ void MainWindow::runOptimizer() {
                 updateValidation();
 
                 ResourcePlan dp = optimizedMaze_.optimalResourceWalk();
-                int worstGreedy = std::numeric_limits<int>::max();
-                const QVector<GreedyStrategy> strategies = {
-                    GreedyStrategy::ValuePerStep,
-                    GreedyStrategy::CautiousCollector,
-                    GreedyStrategy::AvoidTraps,
-                    GreedyStrategy::EndGoalFirst
-                };
-                for (GreedyStrategy s : strategies) {
-                    PlayResult result = GreedyPlayer::play(optimizedMaze_, {}, {}, 0, s);
-                    worstGreedy = std::min(worstGreedy, result.remainingResource);
-                }
+                int worstGreedy = MazeEvaluator::evaluateGreedyWorst(optimizedMaze_);
                 lastOptDpScore_ = dp.maxValue;
                 lastOptGreedyScore_ = worstGreedy;
                 lastOptFitness_ = dp.maxValue - worstGreedy;
@@ -1400,48 +1390,57 @@ void MainWindow::runOptimizer() {
                     ec.topoWeight = 0.3;
                     EvalResult before = MazeEvaluator::evaluate(preOptMaze_, ec);
                     EvalResult after = MazeEvaluator::evaluate(optimizedMaze_, ec);
+                    auto row = [](const QString &name,
+                                  const QString &beforeValue,
+                                  const QString &afterValue,
+                                  bool bold = false) {
+                        const QString label = bold
+                            ? QStringLiteral("<b>%1</b>").arg(name)
+                            : name;
+                        const QString afterCell = bold
+                            ? QStringLiteral("<td style='color:#2E7D32'><b>%1</b></td>").arg(afterValue)
+                            : QStringLiteral("<td>%1</td>").arg(afterValue);
+                        return QStringLiteral("<tr><td>%1</td><td>%2</td>%3</tr>")
+                            .arg(label, beforeValue, afterCell);
+                    };
+                    auto f1 = [](double value) {
+                        return QString::number(value, 'f', 1);
+                    };
+                    auto f2 = [](double value) {
+                        return QString::number(value, 'f', 2);
+                    };
+
                     QString report;
                     report += QStringLiteral(
                         "<b>对比评估（优化前 vs 优化后）</b><br/>"
                         "<table style='border-spacing:8px 2px'>"
                         "<tr><td></td><td><b>优化前</b></td><td><b>优化后</b></td></tr>"
-                        "<tr><td>金币漏拾率</td>"
-                            "<td>%1%</td><td>%2%</td></tr>"
-                        "<tr><td>陷阱命中率</td>"
-                            "<td>%3%</td><td>%4%</td></tr>"
-                        "<tr><td>路径迂回度</td>"
-                            "<td>%5%</td><td>%6%</td></tr>"
-                        "<tr><td>区分度 D</td>"
-                            "<td>%7</td><td>%8</td></tr>"
-                        "<tr><td>稳定性 C</td>"
-                            "<td>%9</td><td>%10</td></tr>"
-                        "<tr><td>难度适中 B</td>"
-                            "<td>%11</td><td>%12</td></tr>"
-                        "<tr><td>AI得分均值比</td>"
-                            "<td>%13</td><td>%15</td></tr>"
-                        "<tr><td>AI得分极差</td>"
-                            "<td>%14</td><td>%16</td></tr>"
-                        "<tr><td><b>适应度 finalFitness</b></td>"
-                            "<td>%17</td><td style='color:#2E7D32'><b>%18</b></td></tr>"
-                        "</table>")
-                        .arg(before.coinMissRate * 100, 0, 'f', 1)
-                        .arg(after.coinMissRate * 100, 0, 'f', 1)
-                        .arg(before.trapHitRate * 100, 0, 'f', 1)
-                        .arg(after.trapHitRate * 100, 0, 'f', 1)
-                        .arg(before.pathInefficiency * 100, 0, 'f', 1)
-                        .arg(after.pathInefficiency * 100, 0, 'f', 1)
-                        .arg(before.designDiscrimination, 0, 'f', 2)
-                        .arg(after.designDiscrimination, 0, 'f', 2)
-                        .arg(before.designStability, 0, 'f', 2)
-                        .arg(after.designStability, 0, 'f', 2)
-                        .arg(before.designBalance, 0, 'f', 2)
-                        .arg(after.designBalance, 0, 'f', 2)
-                        .arg(before.meanAIScoreRatio, 0, 'f', 2)
-                        .arg(before.aiScoreSpread, 0, 'f', 2)
-                        .arg(after.meanAIScoreRatio, 0, 'f', 2)
-                        .arg(after.aiScoreSpread, 0, 'f', 2)
-                        .arg(before.finalFitness, 0, 'f', 1)
-                        .arg(after.finalFitness, 0, 'f', 1);
+                        "<tr><td colspan='3'><b>主评估指标（用于判断优化是否合理）</b></td></tr>");
+                    report += row(QStringLiteral("区分度 D"), f2(before.designDiscrimination),
+                                  f2(after.designDiscrimination));
+                    report += row(QStringLiteral("稳定性 C"),
+                                  QStringLiteral("%1 / %2").arg(before.reachedAiCount)
+                                      .arg(before.evaluatedAiCount),
+                                  QStringLiteral("%1 / %2").arg(after.reachedAiCount)
+                                      .arg(after.evaluatedAiCount));
+                    report += row(QStringLiteral("难度适中 B"), f2(before.designBalance),
+                                  f2(after.designBalance));
+                    report += row(QStringLiteral("AI得分均值比"), f2(before.meanAIScoreRatio),
+                                  f2(after.meanAIScoreRatio));
+                    report += row(QStringLiteral("AI得分极差"), f2(before.aiScoreSpread),
+                                  f2(after.aiScoreSpread));
+                    report += row(QStringLiteral("适应度 finalFitness"), f1(before.finalFitness),
+                                  f1(after.finalFitness), true);
+                    report += QStringLiteral(
+                        "<tr><td colspan='3'><b>行为诊断（辅助解释，不单独判定）</b></td></tr>");
+                    report += row(QStringLiteral("金币漏拾率"), f1(before.coinMissRate * 100) + "%",
+                                  f1(after.coinMissRate * 100) + "%");
+                    report += row(QStringLiteral("陷阱命中率"), f1(before.trapHitRate * 100) + "%",
+                                  f1(after.trapHitRate * 100) + "%");
+                    report += row(QStringLiteral("路径迂回度"),
+                                  f1(before.pathInefficiency * 100) + "%",
+                                  f1(after.pathInefficiency * 100) + "%");
+                    report += QStringLiteral("</table>");
                     bool improved = after.finalFitness > before.finalFitness;
                     report += improved
                         ? QStringLiteral("<br/><b style='color:#2E7D32'>✓ 优化有效（适应度提升）</b>")
