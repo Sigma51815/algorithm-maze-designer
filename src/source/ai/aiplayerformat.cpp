@@ -1,3 +1,5 @@
+// 文件职责：AI 测试系统输入格式构造。
+// 将迷宫矩阵、路径、BOSS 血量和技能序列转换为约定的紧凑 JSON 字段。
 #include "ai/aiplayerformat.h"
 
 #include <QJsonArray>

@@ -12,10 +12,10 @@
 #include <random>
 
 enum class MazeAlgorithm {
-    DivideAndConquer,
-    KruskalMst,
-    DepthFirstSearch,
-    BreadthFirstSearch
+    DivideAndConquer,   // 分治法：递归划分区域，再用一个开口连接左右/上下子迷宫
+    KruskalMst,         // 最小生成树算法：随机化所有相邻边，用并查集选边避免成环
+    DepthFirstSearch,   // 回溯法：深度优先走到尽头再回退，形成长走廊和深分支
+    BreadthFirstSearch  // 分支限界法：用优先队列扩展边界，按下界选择下一条通路
 };
 
 struct MazeEdge {

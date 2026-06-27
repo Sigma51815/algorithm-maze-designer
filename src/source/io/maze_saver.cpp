@@ -1,3 +1,5 @@
+// 文件职责：迷宫 JSON 保存和读取。
+// 把 MazeModel、资源、BOSS 信息和 GA 结果序列化，供现场复制到测试系统或重新载入。
 #include "maze_saver.h"
 
 #include <QDateTime>
@@ -8,6 +10,7 @@
 #include <QSaveFile>
 #include <QTextStream>
 
+// 保存当前迷宫：把结构、资源、起终点、BOSS 和附加元数据写成 JSON。
 bool MazeSaver::saveMaze(const QString &path, const MazeModel &maze,
                          const QString &name, const QString &source,
                          int fitness, int dpScore,
@@ -23,6 +26,7 @@ bool MazeSaver::saveMaze(const QString &path, const MazeModel &maze,
     return file.commit();
 }
 
+// 读取已保存迷宫：解析 JSON 后恢复 MazeModel，便于现场复现同一个迷宫。
 bool MazeSaver::loadMaze(const QString &path, SavedMazeInfo &info) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {

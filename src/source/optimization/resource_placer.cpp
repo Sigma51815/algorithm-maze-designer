@@ -1,3 +1,5 @@
+// 文件职责：资源放置策略。
+// 在迷宫生成后决定金币和陷阱位置，支持随机、智能和对抗式三种放置方式。
 #include "resource_placer.h"
 
 namespace {
@@ -8,6 +10,7 @@ int normalizedTrapValue(int value) {
 
 } // namespace
 
+// 智能放置：金币优先放在值得探索的位置，陷阱适度分布，作为较平衡的资源布局。
 void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &config) {
     if (maze.cellCount() <= 2) return;
 
@@ -98,6 +101,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     maze.setResources(resources);
 }
 
+// 对抗放置：陷阱偏向非主路径分叉口，金币藏在深分支，用来拉开不同 AI 策略的得分。
 void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfig &config) {
     if (maze.cellCount() <= 2) return;
 

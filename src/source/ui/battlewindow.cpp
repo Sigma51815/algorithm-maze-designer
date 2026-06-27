@@ -1,3 +1,5 @@
+// 文件职责：BOSS 战动画窗口。
+// 用界面方式展示分支限界求出的技能序列、血条变化和自动播放过程。
 #include "battlewindow.h"
 
 #include <QAbstractAnimation>
@@ -443,6 +445,7 @@ void BattleWindow::stopAutoPlay() {
     refreshUi();
 }
 
+// 自动播放模式按求解出的技能序列逐步推进，方便验收时演示 BOSS 战过程。
 void BattleWindow::advanceAutoPlay() {
     if (!autoPlaying_ || animating_ || autoStep_ >= optimalResult_.skillSequence.size()) {
         if (autoStep_ >= optimalResult_.skillSequence.size()) {

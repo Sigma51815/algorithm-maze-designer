@@ -1,3 +1,5 @@
+// 文件职责：迷宫质量评估。
+// 运行多种 3x3 贪心 AI，计算 D/B/C 区分度指标和 finalFitness，供 GA 选择。
 #include "maze_evaluator.h"
 
 #include <QQueue>
@@ -47,6 +49,7 @@ double stddevOf(const QVector<double> &values, double mean) {
 
 } // namespace
 
+// 适应度评估入口：可先放置资源，再运行多种贪心 AI，最后计算 D/B/C 和 finalFitness。
 EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &config) {
     EvalResult result;
 

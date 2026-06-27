@@ -71,6 +71,8 @@ void MazeModel::reset(int rows, int columns, quint32 seed) {
     random_.seed(seed);
 }
 
+// 四种迷宫生成算法的统一入口。UI 下拉框的索引会直接转换成 MazeAlgorithm，
+// 因此验收时选择“分治 / Kruskal / DFS / BFS”最终都会走到这里。
 void MazeModel::generate(int rows, int columns, MazeAlgorithm algorithm, quint32 seed) {
     reset(rows, columns, seed);
     switch (algorithm) {
@@ -175,6 +177,11 @@ void MazeModel::carve(int first, int second) {
     generationSteps_.append({first, second});
 }
 
+// 分治法生成迷宫。
+// 思路：把当前矩形区域按较长方向随机切成两块，递归生成左右/上下子迷宫，
+// 再随机凿开一条跨分割线的通道。每次只连接两个已经连通的子区域一次，
+// 所以最终仍是连通且无环的完美迷宫。
+// 复杂度：每个格子在递归划分中被处理常数次，平均 O(V)，递归深度约 O(log V)。
 void MazeModel::generateDivideAndConquer(int top, int bottom, int left, int right) {
     if (top == bottom && left == right) {
         return;
@@ -201,6 +208,11 @@ void MazeModel::generateDivideAndConquer(int top, int bottom, int left, int righ
     }
 }
 
+// 最小生成树（Kruskal）生成迷宫。
+// 思路：把所有相邻格子的墙看成候选边，随机打乱后依次尝试加入；
+// 并查集 DisjointSet 保证只有连接两个不同连通块的边才会被凿开，避免成环。
+// 当选中 V-1 条边后，格子图就是一棵随机生成树，也就是完美迷宫。
+// 复杂度：候选边 E≈2V，洗牌 O(E)，并查集近似 O(E α(V))，整体可视为 O(V)。
 void MazeModel::generateKruskal() {
     QVector<MazeEdge> candidates;
     for (int row = 0; row < rows_; ++row) {
@@ -224,6 +236,11 @@ void MazeModel::generateKruskal() {
     }
 }
 
+// 回溯法（DFS）生成迷宫。
+// 思路：从起点开始随机选择一个未访问邻居前进；走到无路可走时从栈回退，
+// 再继续寻找未访问分支。每个格子第一次被访问时凿开一条父子边，天然无环。
+// 特性：容易产生较长走廊和较深死胡同，现场展示时路径“蜿蜒感”最明显。
+// 复杂度：每个格子和相邻边最多检查常数次，O(V+E)，网格中约为 O(V)。
 void MazeModel::generateDepthFirst() {
     QVector<bool> visited(cellCount(), false);
     QVector<int> stack{startCell()};
@@ -249,6 +266,12 @@ void MazeModel::generateDepthFirst() {
     }
 }
 
+// 分支限界法（BFS/优先队列边界扩展）生成迷宫。
+// 思路：维护从已访问区域出发的候选边界，用 lowerBound = 深度 + 分叉度 + 随机扰动
+// 估计“更值得扩展”的分支，优先队列每次取下界最小的边扩展。若来源格子的度数
+// 已变化，就重新计算下界再入队，保证决策使用最新状态。外层最多尝试 12 次，
+// 保留主路更长、死胡同更多的一次，便于生成更有区分度的迷宫。
+// 复杂度：单次扩展每条边最多入队/出队少量几次，约 O(E log E)；12 次尝试是常数倍。
 void MazeModel::generateBreadthFirst() {
     struct FrontierBranch {
         int lowerBound = 0;

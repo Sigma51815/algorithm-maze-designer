@@ -1,3 +1,5 @@
+// 文件职责：主窗口交互逻辑。
+// 负责算法下拉框、生成按钮、资源求解、BOSS 演示、AI 运行、导出和 GA 优化入口。
 #include "mainwindow.h"
 
 #include "ai/aiplayerformat.h"
@@ -702,6 +704,7 @@ void MainWindow::buildUi() {
     )"));
 }
 
+// 生成按钮主流程：读取 UI 中选择的算法、尺寸和随机种子，调用 MazeModel::generate() 生成迷宫。
 void MainWindow::generateMaze() {
     stopOptimizer();   // stop any running GA before replacing the maze
     stopAiWorker();    // stop any running AI before replacing the maze
@@ -1300,6 +1303,7 @@ void MainWindow::exportMaze() {
     statusBar()->showMessage(QStringLiteral("已导出：%1").arg(path), 5000);
 }
 
+// GA 线程优化入口：把当前 UI 参数封装成 OptimizerConfig，在线程中进化迷宫并回传最优结果。
 void MainWindow::runOptimizer() {
     if (!optEnableCheck_->isChecked() || maze_.cellCount() == 0 || optimizerThread_) {
         return;

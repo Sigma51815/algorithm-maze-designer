@@ -1,3 +1,5 @@
+// 文件职责：迷宫可视化控件。
+// 根据 MazeModel 绘制墙、通路、起点/终点、BOSS、金币陷阱以及动画路径。
 #include "mazewidget.h"
 
 #include <QPainter>
@@ -88,6 +90,7 @@ bool MazeWidget::passageVisible(int first, int second) const {
     return false;
 }
 
+// 所有迷宫可视化最终都在这里绘制：墙体、格子标记、生成动画、DP 路径和 AI 行走轨迹。
 void MazeWidget::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);

@@ -1,3 +1,5 @@
+// 文件职责：旧版 AI 输入格式兼容。
+// 保留历史接口格式，方便对照旧测试系统或旧文档。
 #include "legacy/aiplayerformat.h"
 
 #include <QJsonArray>

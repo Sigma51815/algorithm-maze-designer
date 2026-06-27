@@ -1,3 +1,5 @@
+// 文件职责：Q-Learning 边操作精调工具。
+// 通过加边/删边动作微调迷宫结构；它是独立优化工具，不是四种基础生成算法入口。
 #include "ai/qlearning_optimizer.h"
 
 #include "ai/greedy_player.h"
@@ -198,6 +200,7 @@ void QLearningOptimizer::decayEpsilon() {
                                 config_.epsilon * config_.epsilonDecay);
 }
 
+// 训练入口：在一批迷宫上反复尝试边操作，根据评估奖励更新 Q 表。
 void QLearningOptimizer::train(QVector<MazeModel> &mazes) {
     for (int ep = 0; ep < config_.episodes; ++ep) {
         for (MazeModel &maze : mazes) {

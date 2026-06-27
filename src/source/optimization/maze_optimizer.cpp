@@ -1,3 +1,5 @@
+// 文件职责：遗传算法优化迷宫。
+// 维护迷宫种群，执行选择、交叉、变异和适应度评估，生成更适合区分 AI 的迷宫。
 #include "maze_optimizer.h"
 
 #include "ai/greedy_player.h"
@@ -22,6 +24,7 @@ void MazeOptimizer::stop() {
     stopped_ = true;
 }
 
+// GA 主循环：初始化种群，逐代选择、交叉、变异，持续保留适应度最高的迷宫。
 MazeModel MazeOptimizer::run() {
     stopped_ = false;
     rng_.seed(config_.seed);
@@ -175,6 +178,7 @@ QVector<MazeEdge> MazeOptimizer::mazeEdges(const MazeModel &maze) {
     return maze.allEdges();
 }
 
+// 交叉操作：合并两个父代的边集，并用并查集补成一棵新的完美迷宫生成树。
 MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
                                                      const Chromosome &b) {
     const int totalCells = config_.rows * config_.columns;
@@ -255,6 +259,7 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
     return child;
 }
 
+// 变异操作：要么重新随机生成，要么做边交换，在保持完美迷宫的前提下改变拓扑。
 void MazeOptimizer::mutate(Chromosome &chrom) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 

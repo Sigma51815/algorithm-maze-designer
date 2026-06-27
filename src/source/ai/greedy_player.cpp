@@ -1,3 +1,5 @@
+// 文件职责：内置 3x3 视野贪心 AI。
+// 用几种局部策略模拟参赛 AI，给迷宫区分度和 GA 适应度评估提供对照。
 #include "ai/greedy_player.h"
 
 #include <QQueue>
@@ -19,6 +21,7 @@ struct VisibleCell {
 
 } // namespace
 
+// 3x3 局部 AI 主循环：每一步只看相邻格，按策略选择下一步，用于模拟真实受限视野玩家。
 PlayResult GreedyPlayer::play(const MazeModel &maze,
                                const QVector<int> &bossHealth,
                                const QVector<BossSkill> &bossSkills,

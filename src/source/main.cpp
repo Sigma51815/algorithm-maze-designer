@@ -1,3 +1,5 @@
+// 文件职责：程序入口和命令行自测。
+// 验收时运行 --self-test 会从这里覆盖四种迷宫算法、DP、BOSS、JSON 和 GA 流程。
 #include "ai/greedy_player.h"
 #include "ai/aiplayerformat.h"
 #include "bosssolver.h"
@@ -179,6 +181,7 @@ int bruteForceBossTurns(const QVector<int> &initialHealth,
     return -1;
 }
 
+// 自测入口：覆盖四种算法生成、完美迷宫校验、DP、BOSS、JSON、GA 等验收关键点。
 int runSelfTests() {
     QTextStream output(stdout);
     const QVector<MazeAlgorithm> algorithms{
@@ -1037,6 +1040,7 @@ int runSelfTests() {
 
 } // namespace
 
+// 程序入口：带 --self-test 时走命令行自测，否则启动 Qt 图形界面。
 int main(int argc, char *argv[]) {
     bool guiSmokeTest = false;
     bool battleSmokeTest = false;

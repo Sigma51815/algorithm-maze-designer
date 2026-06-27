@@ -1,3 +1,5 @@
+// 文件职责：BOSS 战分支限界求解。
+// 通过状态记忆、冷却约束和剪枝搜索，求出击败所有 BOSS 的最少回合方案。
 #include "bosssolver.h"
 
 #include "maze.h"
@@ -85,6 +87,7 @@ int optimisticTurnLowerBound(int remainingHealth,
 
 } // namespace
 
+// 分支限界核心：在技能冷却和伤害模式约束下搜索最少回合，并用状态记忆避免重复展开。
 BossResult BossSolver::solve(const QVector<int> &bossHealth,
                              const QVector<BossSkill> &skills,
                              DamageOverflowMode damageMode) {
