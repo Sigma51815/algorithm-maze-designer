@@ -29,6 +29,8 @@ MazeModel MazeOptimizer::run() {
     stopped_ = false;
     rng_.seed(config_.seed);
 
+    // 一个染色体就是一张完整迷宫：拓扑结构 + 金币/陷阱资源布局。
+    // 初始种群先由基础生成算法给出，后续 GA 只在合法完美迷宫空间里搜索。
     QVector<Chromosome> population(config_.populationSize);
     for (int i = 0; i < config_.populationSize; ++i) {
         population[i] = randomChromosome(i, static_cast<quint32>(config_.seed + i));
@@ -45,9 +47,11 @@ MazeModel MazeOptimizer::run() {
         QVector<Chromosome> nextGen;
         nextGen.reserve(config_.populationSize);
 
+        // 精英保留：上一轮历史最优直接进入下一代，避免好解被交叉/变异破坏。
         nextGen.append(best);
 
         while (nextGen.size() < config_.populationSize) {
+            // 锦标赛选择提供适度选择压力：更容易选中高分个体，但仍保留随机性。
             Chromosome parent1 = tournamentSelect(population);
             Chromosome parent2 = tournamentSelect(population);
 
@@ -115,6 +119,7 @@ MazeOptimizer::Chromosome MazeOptimizer::randomChromosome(int index, quint32 see
     const MazeAlgorithm algo = config_.useMixedAlgorithms
         ? algorithmForIndex(index)
         : config_.baseAlgorithm;
+    // 先生成基础迷宫，再放置资源；GA 评估的是二者共同形成的关卡难度。
     chrom.maze.generate(config_.rows, config_.columns, algo, seed);
     if (config_.useAdversarialPlacement) {
         ResourcePlacerConfig pc;
@@ -149,6 +154,7 @@ double MazeOptimizer::evaluateFitness(Chromosome &chrom) {
         ec.useSmartPlacement = false;
         ec.skipPlacement = true;
         ec.topoWeight = config_.topoWeight;
+        // 增强适应度使用 D/B/C：区分度、难度适中性、可完成性共同决定分数。
         EvalResult eval = MazeEvaluator::evaluate(chrom.maze, ec);
         chrom.dpScore = eval.dpScore;
         chrom.greedyScore = eval.worstGreedyScore;
@@ -183,6 +189,8 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
     combined += edgesB;
     std::shuffle(combined.begin(), combined.end(), rng_);
 
+    // 交叉不能简单拼接两张迷宫，否则可能断开或成环。
+    // 这里用并查集从父代边集中挑边，相当于重新构造一棵生成树。
     QVector<int> ufParent(totalCells);
     QVector<int> ufRank(totalCells, 0);
     std::iota(ufParent.begin(), ufParent.end(), 0);
@@ -209,6 +217,8 @@ MazeOptimizer::Chromosome MazeOptimizer::crossover(const Chromosome &a,
         }
     }
 
+    // 如果父代边的并集不足以连通所有格子，就用网格原生相邻边补齐。
+    // 仍然通过 unite 过滤成环，保证最终边数为 V-1。
     for (int cell = 0; childEdges.size() < targetEdges && cell < totalCells; ++cell) {
         int row = cell / config_.columns;
         int col = cell % config_.columns;
@@ -254,6 +264,7 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     if (dist(rng_) < 0.3) {
+        // 大变异：完全重新生成，负责跳出局部最优。
         quint32 newSeed = rng_();
         const MazeAlgorithm algo = config_.useMixedAlgorithms
             ? algorithmForIndex(static_cast<int>(rng_() % 4))
@@ -282,6 +293,8 @@ void MazeOptimizer::mutate(Chromosome &chrom) {
         return;
     }
 
+    // 小变异：边交换。给树加一条非树边会形成唯一环，再删掉环上一条旧边。
+    // 这样拓扑发生变化，但仍保持“连通 + V-1 条边”的完美迷宫性质。
     const int rows = config_.rows;
     const int cols = config_.columns;
     const int totalCells = rows * cols;

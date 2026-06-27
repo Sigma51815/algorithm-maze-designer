@@ -77,6 +77,8 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
 
     ResourcePlan dp = maze.optimalResourceWalk();
     result.dpScore = dp.maxValue;
+    // DP 分数代表“全局最优玩家”理论上能拿到的资源上限，
+    // 后面会用它归一化局部贪心 AI 的表现。
 
     // Count total coins / traps in the maze.
     int totalCoins = 0, totalTraps = 0;
@@ -123,6 +125,8 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         };
         QVector<AiRaw> aiRawResults;
         for (GreedyStrategy s : strategies) {
+            // 每种策略只看局部 3x3 视野，用来模拟不同风格的受限玩家。
+            // 好迷宫应当让这些策略产生明显差异，而不是全部同分。
             PlayResult r = GreedyPlayer::play(maze, {}, {}, 0, s);
             if (r.score < worstAIScore) {
                 worst = r.remainingResource;
@@ -187,6 +191,8 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         const double dStddev = clamp01(nsStddev / kStddevNorm);
         const double dRange  = clamp01(nsRange  / kRangeNorm);
         const double dLayers = clamp01(static_cast<double>(significantGaps) / 3.0);
+        // D: 区分度。标准差说明整体离散，极差说明最好/最差差距，
+        // significantGaps 防止只有一个离群值导致“假区分”。
         if (dStddev + dRange > 0.0) {
             const double spreadCore = 2.0 * dStddev * dRange / (dStddev + dRange);
             result.designDiscrimination = std::sqrt(spreadCore * dLayers);
@@ -198,6 +204,8 @@ EvalResult MazeEvaluator::evaluate(MazeModel &maze, const EvaluatorConfig &confi
         result.designStability = clamp01(
             static_cast<double>(reachedCount) / strategies.size());
 
+        // B: 难度适中性。平均分太高说明太简单，太低说明过难；
+        // 当前经验目标是归一化平均得分接近 0.45。
         result.designBalance = clamp01(
             1.0 - std::abs(nsMean - kBalanceIdeal) / kBalanceTol);
 

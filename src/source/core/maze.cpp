@@ -71,8 +71,19 @@ void MazeModel::reset(int rows, int columns, quint32 seed) {
     random_.seed(seed);
 }
 
-// 四种迷宫生成算法的统一入口。UI 下拉框的索引会直接转换成 MazeAlgorithm，
-// 因此验收时选择“分治 / Kruskal / DFS / BFS”最终都会走到这里。
+// 四种迷宫生成算法的统一入口。
+//
+// 约定：
+// 1. rows/columns 是逻辑格子数量，不是最终输出字符矩阵的行列数。
+// 2. reset() 会先把所有墙封闭，四种算法都只通过 carve() 打通相邻格。
+// 3. 四种算法的共同目标都是生成一棵覆盖全部格子的树：
+//    - 连通：任意两个格子之间都有路；
+//    - 无环：任意两个格子之间只有一条简单路径；
+//    - 边数为 V-1，因此是“完美迷宫”。
+// 4. 生成拓扑后，chooseDiameterEndpoints() 再把最长路径附近设为起点、终点和 BOSS。
+//
+// UI 下拉框的索引会直接转换成 MazeAlgorithm，因此验收时选择
+// “分治 / Kruskal / DFS / BFS”最终都会走到这里。
 void MazeModel::generate(int rows, int columns, MazeAlgorithm algorithm, quint32 seed) {
     reset(rows, columns, seed);
     switch (algorithm) {
@@ -178,10 +189,26 @@ void MazeModel::carve(int first, int second) {
 }
 
 // 分治法生成迷宫。
-// 思路：把当前矩形区域按较长方向随机切成两块，递归生成左右/上下子迷宫，
-// 再随机凿开一条跨分割线的通道。每次只连接两个已经连通的子区域一次，
-// 所以最终仍是连通且无环的完美迷宫。
-// 复杂度：每个格子在递归划分中被处理常数次，平均 O(V)，递归深度约 O(log V)。
+//
+// 输入参数表示当前递归负责的闭区间矩形：
+//   行范围 [top, bottom]，列范围 [left, right]。
+//
+// 核心思想：
+// 1. 如果当前区域只有一个格子，递归结束。
+// 2. 否则优先沿较长方向随机切一刀，得到两个子矩形。
+// 3. 分别递归生成两个子矩形内部的迷宫。
+// 4. 在分割线随机选一个位置，用 carve() 打通左右/上下两个子迷宫。
+//
+// 正确性直觉：
+// 每个子矩形递归结束后都是一棵树；当前层只在两棵树之间添加一条连接边。
+// “两棵树 + 一条跨树边”仍然是一棵更大的树，所以不会成环，同时保持连通。
+//
+// 生成风格：
+// 区域边界感较强，容易出现比较长的墙段和少量随机开口，结构比 DFS 更规整。
+//
+// 复杂度：
+// V = rows * columns。平均情况下每个格子参与常数次划分，时间约 O(V)；
+// 递归深度平均约 O(log V)，极端随机切分时最坏可到 O(V)。
 void MazeModel::generateDivideAndConquer(int top, int bottom, int left, int right) {
     if (top == bottom && left == right) {
         return;
@@ -190,18 +217,22 @@ void MazeModel::generateDivideAndConquer(int top, int bottom, int left, int righ
     const int height = bottom - top + 1;
     const int width = right - left + 1;
     if (width >= height && width > 1) {
+        // 竖向分割：左子矩形 [left, split]，右子矩形 [split + 1, right]。
         std::uniform_int_distribution<int> splitDistribution(left, right - 1);
         const int split = splitDistribution(random_);
         generateDivideAndConquer(top, bottom, left, split);
         generateDivideAndConquer(top, bottom, split + 1, right);
+        // 在分割线随机开一个口，连接左右两个已经生成好的子迷宫。
         std::uniform_int_distribution<int> openingDistribution(top, bottom);
         const int openingRow = openingDistribution(random_);
         carve(index(openingRow, split), index(openingRow, split + 1));
     } else {
+        // 横向分割：上子矩形 [top, split]，下子矩形 [split + 1, bottom]。
         std::uniform_int_distribution<int> splitDistribution(top, bottom - 1);
         const int split = splitDistribution(random_);
         generateDivideAndConquer(top, split, left, right);
         generateDivideAndConquer(split + 1, bottom, left, right);
+        // 在分割线随机开一个口，连接上下两个已经生成好的子迷宫。
         std::uniform_int_distribution<int> openingDistribution(left, right);
         const int openingColumn = openingDistribution(random_);
         carve(index(split, openingColumn), index(split + 1, openingColumn));
@@ -209,10 +240,27 @@ void MazeModel::generateDivideAndConquer(int top, int bottom, int left, int righ
 }
 
 // 最小生成树（Kruskal）生成迷宫。
-// 思路：把所有相邻格子的墙看成候选边，随机打乱后依次尝试加入；
-// 并查集 DisjointSet 保证只有连接两个不同连通块的边才会被凿开，避免成环。
-// 当选中 V-1 条边后，格子图就是一棵随机生成树，也就是完美迷宫。
-// 复杂度：候选边 E≈2V，洗牌 O(E)，并查集近似 O(E α(V))，整体可视为 O(V)。
+//
+// 图模型：
+// 每个格子是一个顶点；上下左右相邻格子之间的墙是一条候选边。
+// 初始时没有任何通道，相当于 V 个互不连通的点。
+//
+// 核心思想：
+// 1. 枚举所有“向右”和“向下”的相邻边，避免同一堵墙重复加入候选集。
+// 2. 随机打乱候选边，相当于给每条边一个随机权重。
+// 3. 按随机顺序尝试加入边；并查集判断两个端点是否已连通。
+// 4. 如果端点不连通，就打通这堵墙并合并两个连通块；如果已连通就跳过。
+//
+// 正确性直觉：
+// Kruskal 每次只连接两个不同连通块，因此不会产生环；候选边覆盖整个网格，
+// 最终所有连通块会合并成一个，得到一棵覆盖全部格子的随机生成树。
+//
+// 生成风格：
+// 随机性较均匀，不像分治那样有明显区域边界，也不像 DFS 那样偏长走廊。
+//
+// 复杂度：
+// 网格候选边 E 约等于 2V。洗牌 O(E)，并查集合并/查询近似 O(E α(V))，
+// 因为反阿克曼函数 α(V) 极小，实际可近似看作 O(V)。
 void MazeModel::generateKruskal() {
     QVector<MazeEdge> candidates;
     for (int row = 0; row < rows_; ++row) {
@@ -230,6 +278,7 @@ void MazeModel::generateKruskal() {
 
     DisjointSet sets(cellCount());
     for (const MazeEdge &edge : candidates) {
+        // unite() 返回 true 表示这条边连接了两个原本不同的连通块，可以安全打通。
         if (sets.unite(edge.from, edge.to)) {
             carve(edge.from, edge.to);
         }
@@ -237,10 +286,28 @@ void MazeModel::generateKruskal() {
 }
 
 // 回溯法（DFS）生成迷宫。
-// 思路：从起点开始随机选择一个未访问邻居前进；走到无路可走时从栈回退，
-// 再继续寻找未访问分支。每个格子第一次被访问时凿开一条父子边，天然无环。
-// 特性：容易产生较长走廊和较深死胡同，现场展示时路径“蜿蜒感”最明显。
-// 复杂度：每个格子和相邻边最多检查常数次，O(V+E)，网格中约为 O(V)。
+//
+// 数据结构：
+// visited 记录格子是否已经加入生成树；stack 保存当前深搜路径。
+//
+// 核心思想：
+// 1. 从 startCell_ 出发，把起点标记为已访问并压栈。
+// 2. 查看栈顶格子的未访问邻居。
+// 3. 如果存在未访问邻居，随机选择一个，打通当前格子到该邻居的墙，然后入栈。
+// 4. 如果没有未访问邻居，说明这条路已经走到尽头，弹栈回退到上一个分叉。
+// 5. 栈空时，所有可达格子都已访问；在规则网格中也就是全部格子。
+//
+// 正确性直觉：
+// 一个格子只会在“第一次访问”时被父格子连接，因此每个非起点格子只有一条父边。
+// 这种父子边集合天然不会成环；DFS 又会遍历完整网格，所以最终连通。
+//
+// 生成风格：
+// DFS 会倾向于沿着一个方向深入很久，再慢慢回退补分支，因此常出现长走廊、
+// 深死胡同和比较强的蜿蜒感。
+//
+// 复杂度：
+// 每个格子入栈/出栈一次，相邻边检查常数次，时间 O(V + E)，网格中 E=O(V)。
+// visited 和 stack 都是 O(V) 空间。
 void MazeModel::generateDepthFirst() {
     QVector<bool> visited(cellCount(), false);
     QVector<int> stack{startCell()};
@@ -255,6 +322,7 @@ void MazeModel::generateDepthFirst() {
             }
         }
         if (choices.isEmpty()) {
+            // 当前格子四周都访问过了，回退到上一个仍可能有分支的格子。
             stack.removeLast();
             continue;
         }
@@ -267,11 +335,36 @@ void MazeModel::generateDepthFirst() {
 }
 
 // 分支限界法（BFS/优先队列边界扩展）生成迷宫。
-// 思路：维护从已访问区域出发的候选边界，用 lowerBound = 深度 + 分叉度 + 随机扰动
-// 估计“更值得扩展”的分支，优先队列每次取下界最小的边扩展。若来源格子的度数
-// 已变化，就重新计算下界再入队，保证决策使用最新状态。外层最多尝试 12 次，
-// 保留主路更长、死胡同更多的一次，便于生成更有区分度的迷宫。
-// 复杂度：单次扩展每条边最多入队/出队少量几次，约 O(E log E)；12 次尝试是常数倍。
+//
+// 这里的名字叫 BreadthFirstSearch，但实现不是普通 FIFO 队列 BFS，
+// 而是“分层 BFS + 分支限界”的优先队列扩展。
+//
+// 数据结构：
+// frontier 保存所有从已访问区域指向未访问格子的候选边。
+// 每条候选边是一个 FrontierBranch，包含：
+//   from/to       : 候选边两端；
+//   depth         : 从随机根节点扩展到该边时的层数；
+//   sourceDegree  : from 当前已经连接了多少条通道；
+//   randomWeight  : 随机扰动，避免结果过于固定；
+//   lowerBound    : 优先级，下界越小越先扩展。
+//
+// lowerBound 设计：
+//   lowerBound = depth * 10000 + degree[from] * 100 + randomWeight
+// depth 权重最大，使整体保持 BFS 分层扩展；degree 次之，影响分叉形态；
+// randomWeight 最小，只负责同层同类候选的随机化。
+//
+// 分支限界含义：
+// 每次只扩展当前 lowerBound 最小的候选边。如果 to 已经访问过，说明它已经
+// 通过更早或更优的边加入生成树，这条边会造成环，直接剪掉。若 from 的度数
+// 已经变化，则旧 lowerBound 失效，重新计算后再入队。
+//
+// 多次尝试：
+// 外层最多生成 12 个候选迷宫，用 solutionLength * 10 + deadEnds 打分，
+// 保留主路径更长、死胡同更多的结果，使迷宫更有挑战和区分度。
+//
+// 复杂度：
+// 单次尝试中，每条候选边会进行优先队列操作，约 O(E log E)；
+// 12 次是固定常数倍，网格中可写作 O(V log V)。
 void MazeModel::generateBreadthFirst() {
     struct FrontierBranch {
         int lowerBound = 0;
@@ -307,6 +400,7 @@ void MazeModel::generateBreadthFirst() {
         std::uniform_int_distribution<quint32> tieBreaker;
 
         auto addBranches = [&](int cell, int depth) {
+            // 把当前格子通向“未访问邻居”的所有边加入边界集合。
             QVector<int> choices = gridNeighbors(cell);
             std::shuffle(choices.begin(), choices.end(), random_);
             for (int next : choices) {
@@ -330,9 +424,11 @@ void MazeModel::generateBreadthFirst() {
             FrontierBranch branch = frontier.top();
             frontier.pop();
             if (visited[branch.to]) {
+                // 目标格子已经被接入生成树，再打通会形成环，剪枝跳过。
                 continue;
             }
             if (branch.sourceDegree != degree[branch.from]) {
+                // from 的分叉度已变化，旧下界不再准确，更新后重新参与排序。
                 branch.sourceDegree = degree[branch.from];
                 branch.lowerBound = branch.depth * 10000 + branch.sourceDegree * 100
                     + branch.randomWeight;
@@ -349,6 +445,7 @@ void MazeModel::generateBreadthFirst() {
         chooseDiameterEndpoints();
         const MazeStatistics stats = statistics();
         const int score = stats.solutionLength * 10 + stats.deadEnds;
+        // 用较长主路径和更多死胡同作为候选质量指标，保留当前最好的一次尝试。
         if (score > bestScore) {
             bestScore = score;
             bestPassages = passages_;
@@ -707,6 +804,8 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
         return result;
     }
 
+    // 完美迷宫是一棵树，因此“从某条边进入一个子树能获得多少净收益”
+    // 可以用记忆化递归计算。负收益子树会被舍弃，正收益子树才值得绕路收集。
     QVector<QHash<int, int>> directedGain(cellCount());
     std::function<int(int, int)> calculateGain = [&](int cell, int from) {
         const auto cached = directedGain[cell].constFind(from);
@@ -726,6 +825,8 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
 
     int bestRoot = 0;
     int bestValue = std::numeric_limits<int>::min();
+    // 尝试每个格子作为收集路径根节点，找到全局最优资源收益。
+    // 这个结果在优化评估中作为“理想玩家”的上限分数。
     for (int cell = 0; cell < cellCount(); ++cell) {
         const int value = calculateGain(cell, -1);
         if (value > bestValue) {

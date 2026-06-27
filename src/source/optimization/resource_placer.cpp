@@ -17,6 +17,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     std::mt19937 rng(config.seed);
     auto topo = maze.analyzeTopology();
 
+    // 先按拓扑给格子分类，资源摆放不再纯随机，而是参考死胡同、主路径和分支深度。
     QVector<int> deadEnds, junctions, branchDeep, mainPathCells, allCells;
     for (int cell = 0; cell < maze.cellCount(); ++cell) {
         if (cell == maze.startCell() || cell == maze.endCell() || cell == maze.bossCell())
@@ -31,6 +32,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     QVector<int> resources(maze.cellCount(), 0);
 
     // === Place coins ===
+    // 智能模式偏“鼓励探索”：金币优先给死胡同和较深分支，让绕路有收益。
     int coinsLeft = std::min(config.coinCount, static_cast<int>(allCells.size()));
 
     int deadEndCoins = std::min(
@@ -61,6 +63,7 @@ void ResourcePlacer::placeSmart(MazeModel &maze, const ResourcePlacerConfig &con
     }
 
     // === Place traps ===
+    // 陷阱放在非主路径分叉口和少量主路径上，既能制造风险，又不至于完全卡死玩家。
     int trapsLeft = std::min(config.trapCount, static_cast<int>(allCells.size()));
     QVector<int> trapCandidates;
     for (int cell : allCells) {
@@ -108,6 +111,8 @@ void ResourcePlacer::placeAdversarial(MazeModel &maze, const ResourcePlacerConfi
     std::mt19937 rng(config.seed);
     auto topo = maze.analyzeTopology();
 
+    // 对抗模式的目标是拉开 AI 策略差距：探索型 AI 更可能踩陷阱，
+    // 直奔终点型 AI 又更可能错过深分支金币。
     QVector<int> deadEnds, junctions, branchDeep, mainPathCells, allCells;
     for (int cell = 0; cell < maze.cellCount(); ++cell) {
         if (cell == maze.startCell() || cell == maze.endCell() || cell == maze.bossCell())

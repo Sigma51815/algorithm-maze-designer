@@ -24,6 +24,8 @@ int QLearningOptimizer::encodeState(const MazeModel &maze) const {
 
     MazeStatistics stats = maze.statistics();
 
+    // 状态不是完整迷宫，而是压缩后的拓扑特征组合：
+    // 死胡同比例、解路径长度、陷阱与 DP 最优路径的关系。
     int f1 = std::min(4, stats.deadEnds * 5 / std::max(1, totalCells));
     int directDist = maze.rows() + maze.columns() - 2;
     int f2 = std::min(4, stats.solutionLength * 5 / std::max(1, directDist));
@@ -121,6 +123,8 @@ bool QLearningOptimizer::applyAction(MazeModel &maze, int actionIndex) const {
 
     const WallCandidate newEdge = wallCandidates[actionIndex];
 
+    // 动作含义：选择一面墙打通。树中加一条边会形成唯一环，
+    // 再随机删除环上一条边，保证精调后仍是完美迷宫。
     QVector<int> parent(totalCells, -1);
     QQueue<int> queue;
     parent[newEdge.from] = newEdge.from;
@@ -172,6 +176,7 @@ double QLearningOptimizer::computeReward(const MazeModel &before,
         PlayResult greedy = GreedyPlayer::play(m);
         return static_cast<double>(dp.maxValue - greedy.remainingResource);
     };
+    // 奖励使用遗憾值增量：DP 最优玩家和局部贪心玩家差距变大，说明区分度提升。
     return evalRegret(after) - evalRegret(before);
 }
 
@@ -222,6 +227,7 @@ void QLearningOptimizer::train(QVector<MazeModel> &mazes) {
                 double maxNextQ = *std::max_element(
                     qTable_[nextState].begin(), qTable_[nextState].end());
 
+                // 标准 Q-Learning 更新：当前价值向“即时奖励 + 折扣后的未来最优价值”靠拢。
                 qTable_[state][action] += config_.alpha *
                     (reward + config_.gamma * maxNextQ - qTable_[state][action]);
 
