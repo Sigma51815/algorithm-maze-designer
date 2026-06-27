@@ -1,6 +1,6 @@
 # polish 分支优化改动总结
 
-> 分支：`polish`（从 `main` @ `fba0ce2` 分出）  
+> 分支：`polish`（从 `main` @ `fba0ce2` 分出）
 > 日期：2026-06-26
 
 ---
@@ -29,7 +29,7 @@
 对抗式资源放置 ──→ 陷阱放非主路径分叉口，金币放分支深处
     │
     ▼
-4 种纯 3×3 贪心 AI 评估 ──→ ValuePerStep / NearestFirst / AvoidTraps / EndGoalFirst
+4 种纯 3×3 贪心 AI 评估 ──→ ValuePerStep / CautiousCollector / AvoidTraps / EndGoalFirst
     │
     ▼
 新 D/B/C 加权公式 ──→ finalFitness = 100 × D^0.55 × B^0.30 × C^0.15
@@ -66,8 +66,9 @@ normalizedScore[i] = clamp01(aiScore[i] / idealScore)
 未到终点 → 0
 
 // 2. 双维度 D：同时考虑标准差和极差
-D = sqrt(clamp01(stddev(normalizedScores) / 0.22)
-       * clamp01((max-min) / 0.55))
+dStddev = clamp01(stddev(normalizedScores) / 0.22)
+dRange  = clamp01((max-min) / 0.55)
+D = 2 * dStddev * dRange / (dStddev + dRange)
 
 // 3. C 可完成性
 C = reachedCount / 4
@@ -81,7 +82,7 @@ finalFitness = 100 × D^0.55 × B^0.30 × C^0.15
 
 **设计理念**：
 - D 权重 55%：核心目标，直接表达"不同 AI 得分差异"
-- D 双维度：`stddev` 捕获整体离散度，`range` 捕获极端差距；几何平均确保两者同时有意义
+- D 双维度：`stddev` 捕获整体离散度，`range` 捕获极端差距；调和平均确保两者同时有意义，任一维度为 0 时 D 也为 0
 - B 权重 30%：约束条件，防止迷宫太难（全员失败）或太易（全员满分）
 - C 权重 15%：底线约束，迷宫必须可完成
 - 归一化用"每步效率"（resource/steps）而非绝对资源量，消除迷宫总资源量的干扰
@@ -101,7 +102,7 @@ finalFitness = 100 × D^0.55 × B^0.30 × C^0.15
 
 **改动**：
 - 删除 `bfsPath()` 函数（~20 行）
-- 3 种资源策略（ValuePerStep / NearestFirst / AvoidTraps）：目标就是相邻格，**直接踏入**，无需寻路
+- 3 种资源策略（ValuePerStep / CautiousCollector / AvoidTraps）：目标就是相邻格，**直接踏入**，无需寻路
 - EndGoalFirst：在 4 个相邻方向中选**曼哈顿距离离终点最近**的走，每一步重新判断，不预计算全路径
 - 卡在死胡同时所有策略回退到"去访问次数最少的邻居"（局部回溯）
 
