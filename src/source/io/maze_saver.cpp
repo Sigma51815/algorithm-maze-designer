@@ -13,7 +13,7 @@
 // 保存当前迷宫：把结构、资源、起终点、BOSS 和附加元数据写成 JSON。
 bool MazeSaver::saveMaze(const QString &path, const MazeModel &maze,
                          const QString &name, const QString &source,
-                         int fitness, int dpScore,
+                         double fitness, int dpScore,
                          int greedyScore) {
     QJsonObject json = mazeToJson(maze, name, source, fitness,
                                   dpScore, greedyScore);
@@ -43,7 +43,7 @@ bool MazeSaver::loadMaze(const QString &path, SavedMazeInfo &info) {
 bool MazeSaver::saveGAResult(const QString &path,
                              const MazeModel &maze,
                              const OptimizerConfig &config,
-                             int fitness, int dpScore, int greedyScore) {
+                             double fitness, int dpScore, int greedyScore) {
     QJsonObject json;
     json["format"] = QStringLiteral("ga-result-v1");
     json["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
@@ -75,7 +75,7 @@ bool MazeSaver::saveGAResult(const QString &path,
 QJsonObject MazeSaver::mazeToJson(const MazeModel &maze,
                                   const QString &name,
                                   const QString &source,
-                                  int fitness, int dpScore,
+                                  double fitness, int dpScore,
                                   int greedyScore) {
     QJsonObject json = maze.toJson();
     json["name"] = name;
@@ -93,7 +93,7 @@ bool MazeSaver::loadMazeFromJson(const QJsonObject &json, SavedMazeInfo &info) {
     }
     info.name = json["name"].toString();
     info.source = json["source"].toString();
-    info.fitness = json["fitness"].toInt();
+    info.fitness = json["fitness"].toDouble();
     info.dpScore = json["dpScore"].toInt();
     info.greedyScore = json["greedyScore"].toInt();
     info.timestamp = QDateTime::fromString(json["savedAt"].toString(), Qt::ISODate);

@@ -18,8 +18,10 @@
 #include <QJsonDocument>
 #include <QQueue>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSet>
 #include <QSaveFile>
+#include <QSizePolicy>
 #include <QTextStream>
 #include <QTimer>
 
@@ -244,6 +246,41 @@ int runSelfTests() {
         output << "PASS DP local optimum without endpoints\n";
     }
 
+    {
+        MazeModel routeMaze;
+        routeMaze.setFromEdges(3, 3,
+                               {{0, 1}, {1, 2}, {2, 5}, {5, 8},
+                                {5, 4}, {4, 3}, {3, 6}, {6, 7}},
+                               202801U);
+        routeMaze.setSpecialCells(0, 8, -1, false);
+        routeMaze.setResources({0, -100, -100, 80, 90, 0, 0, 0, 0});
+
+        const ResourcePlan globalPlan = routeMaze.optimalResourceWalk();
+        const ResourcePlan startEndPlan = routeMaze.optimalStartToEndResourceWalk();
+        if (globalPlan.maxValue != 170 || startEndPlan.maxValue != -30
+            || startEndPlan.walk.first() != routeMaze.startCell()
+            || startEndPlan.walk.last() != routeMaze.endCell()
+            || startEndPlan.walk.size() != 9) {
+            output << "FAIL start-to-end resource benchmark: global="
+                   << globalPlan.maxValue << ", route="
+                   << startEndPlan.maxValue << ", steps="
+                   << std::max(0, static_cast<int>(startEndPlan.walk.size()) - 1)
+                   << '\n';
+            output << "  walk:";
+            for (int cell : startEndPlan.walk) output << ' ' << cell;
+            output << "\n  branches:";
+            for (const ResourceBranchDecision &decision : startEndPlan.branchDecisions) {
+                output << " (" << decision.attachCell << "->" << decision.rootCell
+                       << " gain=" << decision.gain
+                       << " selected=" << decision.selected << ')';
+            }
+            output << '\n';
+            return 63;
+        }
+        output << "PASS start-to-end resource benchmark: route="
+               << startEndPlan.maxValue << '\n';
+    }
+
     for (int i = 0; i < algorithms.size(); ++i) {
         MazeModel maze;
         maze.generate(4, 4, algorithms[i], static_cast<quint32>(3000 + i));
@@ -421,6 +458,30 @@ int runSelfTests() {
         }
     }
     output << "PASS AI JSON contract: exact field order and compact 15x15 rows\n";
+
+    {
+        MazeBenchmarkResult benchmark;
+        benchmark.bossBeforeResource = 120;
+        benchmark.finalRemainingResource = 120;
+        benchmark.steps = 30;
+        benchmark.valueStepRatio = 4.0;
+        const QByteArray text = serializeMazeBenchmarkText(benchmark);
+        if (!text.contains("BOSS战之前的资源值: 120")
+            || !text.contains("最终剩余资源价值: 120")
+            || !text.contains("步数: 30")
+            || !text.contains("二者比值: 4.000")) {
+            output << "FAIL best maze benchmark text format\n";
+            return 61;
+        }
+        const QString safeName =
+            sanitizedSubmissionLeaderName(QStringLiteral(" 张/三:*? "));
+        if (safeName != QStringLiteral("张_三")) {
+            output << "FAIL submission leader filename sanitizer: "
+                   << safeName << '\n';
+            return 62;
+        }
+        output << "PASS best maze benchmark text format\n";
+    }
 
     {
         MazeModel apiMaze;
@@ -1051,6 +1112,73 @@ int runSelfTests() {
             eval.designBalance, eval.aiScoreSpread);
     }
 
+    {
+        OptimizerConfig cfg;
+        cfg.rows = 5;
+        cfg.columns = 5;
+        cfg.populationSize = 6;
+        cfg.generations = 4;
+        cfg.mutationRate = 0.12;
+        cfg.tournamentSize = 2;
+        cfg.seed = 91000U;
+        {
+            const int cells = cfg.rows * cfg.columns;
+            cfg.coinCount = autoCoinCount(cells);
+            cfg.trapCount = autoTrapCount(cells);
+        }
+        cfg.useBestMazeSearch = true;
+        cfg.useMixedAlgorithms = false;
+        cfg.useSmartPlacement = true;
+        cfg.useAdversarialPlacement = false;
+        cfg.useEnhancedFitness = false;
+
+        const QVector<OptimizerConfig> presets =
+            MazeOptimizer::bestMazeSearchPresets(cfg);
+        int totalGenerations = 0;
+        bool variedPopulation = false;
+        bool variedMutation = false;
+        for (const OptimizerConfig &preset : presets) {
+            totalGenerations += preset.generations;
+            variedPopulation = variedPopulation
+                || preset.populationSize != cfg.populationSize;
+            variedMutation = variedMutation
+                || std::abs(preset.mutationRate - cfg.mutationRate) > 1e-9;
+            if (preset.useBestMazeSearch || !preset.useMixedAlgorithms
+                || !preset.useAdversarialPlacement || preset.useSmartPlacement
+                || !preset.useEnhancedFitness) {
+                output << "FAIL best maze presets do not force GA search settings\n";
+                return 57;
+            }
+        }
+        if (presets.size() < 3 || totalGenerations <= cfg.generations
+            || !variedPopulation || !variedMutation) {
+            output << "FAIL best maze presets do not explore multiple GA parameters\n";
+            return 58;
+        }
+
+        MazeOptimizer optimizer;
+        optimizer.setConfig(cfg);
+        MazeModel best = optimizer.run();
+        if (!best.validatePerfect()) {
+            output << "FAIL best maze search produced invalid maze\n";
+            return 59;
+        }
+
+        EvaluatorConfig ec;
+        ec.skipPlacement = true;
+        EvalResult eval = MazeEvaluator::evaluate(best, ec);
+        if (eval.finalFitness < 0.0 || eval.finalFitness > 100.0
+            || eval.evaluatedAiCount != 8) {
+            output << "FAIL best maze search fitness invalid: "
+                   << eval.finalFitness << '\n';
+            return 60;
+        }
+
+        output << "PASS best maze search: presets=" << presets.size()
+               << ", totalGen=" << totalGenerations
+               << ", fitness=" << eval.finalFitness << '\n';
+    }
+
     output << "ALL TESTS PASSED\n";
     return 0;
 }
@@ -1227,7 +1355,31 @@ int main(int argc, char *argv[]) {
     MainWindow window;
     window.show();
     if (guiSmokeTest) {
-        QTimer::singleShot(200, &app, &QCoreApplication::quit);
+        QTimer::singleShot(200, &window, [&window] {
+            QScrollArea *sidebar =
+                window.findChild<QScrollArea *>(QStringLiteral("controlSidebar"));
+            if (!sidebar || sidebar->maximumWidth() < 10000
+                || sidebar->sizePolicy().horizontalPolicy() != QSizePolicy::Preferred) {
+                QCoreApplication::exit(61);
+                return;
+            }
+            bool jsonButtonDisabled = false;
+            bool txtButtonDisabled = false;
+            const auto buttons = window.findChildren<QPushButton *>();
+            for (QPushButton *button : buttons) {
+                if (button->text() == QStringLiteral("导出最佳迷宫 JSON")) {
+                    jsonButtonDisabled = !button->isEnabled();
+                }
+                if (button->text() == QStringLiteral("生成迷宫基准 TXT")) {
+                    txtButtonDisabled = !button->isEnabled();
+                }
+            }
+            if (!jsonButtonDisabled || !txtButtonDisabled) {
+                QCoreApplication::exit(62);
+                return;
+            }
+            QCoreApplication::quit();
+        });
     }
     return app.exec();
 }

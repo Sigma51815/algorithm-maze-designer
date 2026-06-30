@@ -95,6 +95,7 @@ public:
     [[nodiscard]] QVector<int> branchCells() const;
     [[nodiscard]] QVector<int> mainPathCells() const;
     [[nodiscard]] ResourcePlan optimalResourceWalk() const;
+    [[nodiscard]] ResourcePlan optimalStartToEndResourceWalk() const;
     [[nodiscard]] QStringList expandedGrid() const;
     [[nodiscard]] QJsonObject toJson() const;
     [[nodiscard]] QStringList compactGrid() const;

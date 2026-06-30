@@ -158,13 +158,13 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth,
                 }
                 return;
             }
-            //// 下界剪枝：最乐观也不能优于当前上界，就停止展开
+            //下界剪枝：最乐观也不能优于当前上界，就停止展开
             int remainingHealth = 0;
             for (int value : health) {
                 remainingHealth += std::max(0, value);
             }
             const int optimisticTurns = optimisticTurnLowerBound(
-                remainingHealth, skills, cooldowns, bestTurns - depth - 1);。
+                remainingHealth, skills, cooldowns, bestTurns - depth - 1);
             if (depth + optimisticTurns >= bestTurns) {
                 ++result.prunedStates;
                 return;

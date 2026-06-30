@@ -24,9 +24,48 @@ void MazeOptimizer::stop() {
     stopped_ = true;
 }
 
-// GA 主循环：初始化种群，逐代选择、交叉、变异，持续保留适应度最高的迷宫。
+QVector<OptimizerConfig> MazeOptimizer::bestMazeSearchPresets(
+    const OptimizerConfig &base) {
+    auto makePreset = [&](int population, int generations, double mutation,
+                          int tournament, quint32 seedOffset) {
+        OptimizerConfig preset = base;
+        preset.populationSize = std::max(base.populationSize, population);
+        preset.generations = std::max(base.generations, generations);
+        preset.mutationRate = mutation;
+        preset.tournamentSize = std::max(base.tournamentSize, tournament);
+        preset.seed = base.seed + seedOffset;
+        preset.useBestMazeSearch = false;
+        preset.useMixedAlgorithms = true;
+        preset.useSmartPlacement = false;
+        preset.useAdversarialPlacement = true;
+        preset.useEnhancedFitness = true;
+        preset.topoWeight = base.topoWeight;
+        return preset;
+    };
+
+    return {
+        makePreset(32, 80, 0.12, 3, 0U),
+        makePreset(48, 120, 0.22, 4, 1000003U),
+        makePreset(72, 180, 0.35, 5, 2000003U),
+    };
+}
+
 MazeModel MazeOptimizer::run() {
     stopped_ = false;
+    if (config_.useBestMazeSearch) {
+        return runBestMazeSearch();
+    }
+
+    Chromosome best = runSingle(0, config_.generations, 1, 1);
+    emit finished(best.maze);
+    return best.maze;
+}
+
+// GA 主循环：初始化种群，逐代选择、交叉、变异，持续保留适应度最高的迷宫。
+MazeOptimizer::Chromosome MazeOptimizer::runSingle(int generationOffset,
+                                                    int totalGenerations,
+                                                    int runIndex,
+                                                    int runCount) {
     rng_.seed(config_.seed);
 
     // 一个染色体就是一张完整迷宫：拓扑结构 + 金币/陷阱资源布局。
@@ -84,10 +123,15 @@ MazeModel MazeOptimizer::run() {
         }
 
         OptimizerStats stats;
-        stats.generation = gen + 1;
+        stats.generation = generationOffset + gen + 1;
         stats.bestFitness = genBest.fitness;
         stats.bestDpScore = genBest.dpScore;
         stats.bestGreedyScore = genBest.greedyScore;
+        stats.totalGenerations = totalGenerations > 0
+            ? totalGenerations
+            : config_.generations;
+        stats.runIndex = runIndex;
+        stats.runCount = runCount;
 
         double sumFitness = 0.0;
         double worstFitness = genBest.fitness;
@@ -101,8 +145,35 @@ MazeModel MazeOptimizer::run() {
         emit generationFinished(stats);
     }
 
-    emit finished(best.maze);
-    return best.maze;
+    return best;
+}
+
+MazeModel MazeOptimizer::runBestMazeSearch() {
+    const OptimizerConfig original = config_;
+    const QVector<OptimizerConfig> presets = bestMazeSearchPresets(original);
+
+    int totalGenerations = 0;
+    for (const OptimizerConfig &preset : presets) {
+        totalGenerations += preset.generations;
+    }
+
+    Chromosome bestOverall;
+    bool hasBest = false;
+    int generationOffset = 0;
+    for (int i = 0; i < presets.size() && !stopped_; ++i) {
+        config_ = presets[i];
+        Chromosome candidate = runSingle(generationOffset, totalGenerations,
+                                         i + 1, presets.size());
+        generationOffset += presets[i].generations;
+        if (!hasBest || candidate.fitness > bestOverall.fitness) {
+            bestOverall = candidate;
+            hasBest = true;
+        }
+    }
+
+    config_ = original;
+    emit finished(bestOverall.maze);
+    return bestOverall.maze;
 }
 
 MazeAlgorithm MazeOptimizer::algorithmForIndex(int index) {

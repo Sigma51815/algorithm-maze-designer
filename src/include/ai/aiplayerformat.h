@@ -5,6 +5,14 @@
 
 #include <QJsonObject>
 #include <QByteArray>
+#include <QString>
+
+struct MazeBenchmarkResult {
+    int bossBeforeResource = 0;
+    int finalRemainingResource = 0;
+    int steps = 0;
+    double valueStepRatio = 0.0;
+};
 
 QJsonObject buildAiPlayerInput(const MazeModel &maze,
                                const QVector<int> &bossHealth,
@@ -26,3 +34,7 @@ QByteArray serializeAiPlayerInput(const MazeModel &maze,
                                   const QVector<BossSkill> &skills,
                                   int roundLimit,
                                   int coinConsumption);
+
+QByteArray serializeMazeBenchmarkText(const MazeBenchmarkResult &benchmark);
+
+QString sanitizedSubmissionLeaderName(const QString &leaderName);

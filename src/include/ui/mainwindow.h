@@ -40,6 +40,7 @@ private:
     QPushButton *generateButton_ = nullptr;
     QLabel *resourceResultLabel_ = nullptr;
     QPlainTextEdit *resourceProcessOutput_ = nullptr;
+    QComboBox *resourceModeBox_ = nullptr;
     QSpinBox *coinSpin_ = nullptr;
     QSpinBox *trapSpin_ = nullptr;
     QSpinBox *coinValueSpin_ = nullptr;
@@ -60,9 +61,11 @@ private:
     QSpinBox *optGenSpin_ = nullptr;
     QSpinBox *optMutSpin_ = nullptr;
     QCheckBox *optEnableCheck_ = nullptr;
+    QCheckBox *optBestMazeCheck_ = nullptr;
     QLabel *optAlgoLabel_ = nullptr;
     QLabel *optProgressLabel_ = nullptr;
-    QPushButton *optSaveButton_ = nullptr;
+    QPushButton *submissionJsonButton_ = nullptr;
+    QPushButton *benchmarkTxtButton_ = nullptr;
     QCheckBox *optAdversarialCheck_ = nullptr;
     QLabel *optCompareLabel_ = nullptr;
     int generationId_ = 0;        // incremented on each generateMaze(); guards stale GA callbacks
@@ -70,7 +73,7 @@ private:
     MazeModel optimizedMaze_;
     bool hasOptimizedMaze_ = false;
     OptimizerConfig lastOptConfig_;
-    int lastOptFitness_ = 0;
+    double lastOptFitness_ = 0.0;
     int lastOptDpScore_ = 0;
     int lastOptGreedyScore_ = 0;
 
@@ -94,7 +97,8 @@ private:
     void runAiPlayer();
     void runOptimizer();
     void applyOptimizedMaze();
-    void saveOptimizedMaze();
+    void exportBestMazeSubmissionJson();
+    void exportBestMazeBenchmarkTxt();
     void updateValidation();
     void stopAiWorker();
     void stopOptimizer();

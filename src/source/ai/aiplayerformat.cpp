@@ -3,6 +3,8 @@
 #include "ai/aiplayerformat.h"
 
 #include <QJsonArray>
+#include <QRegularExpression>
+#include <QStringList>
 
 #include <cstdlib>
 #include <utility>
@@ -174,8 +176,8 @@ QByteArray serializeAiPlayerInput(const MazeModel &maze,
         }
         output += rowIndex + 1 < grid.size() ? "],\n" : "]\n";
     }
-    output += "  ],\n  \"B\":" + numberArray(bossHealth) + ",\n";
-    output += "  \"PlayerSkills\":[";
+    output += "  ],\n  \"B\": " + numberArray(bossHealth) + ",\n";
+    output += "  \"PlayerSkills\": [";
     for (int i = 0; i < skills.size(); ++i) {
         if (i > 0) {
             output += ',';
@@ -186,4 +188,29 @@ QByteArray serializeAiPlayerInput(const MazeModel &maze,
     output += "],\n  \"minRouds\": " + QByteArray::number(roundLimit) + ",\n";
     output += "  \"CoinConsumption\": " + QByteArray::number(coinConsumption) + "\n}\n";
     return output;
+}
+
+QByteArray serializeMazeBenchmarkText(const MazeBenchmarkResult &benchmark) {
+    QString text;
+    text += QStringLiteral("BOSS战之前的资源值: %1\n")
+                .arg(benchmark.bossBeforeResource);
+    text += QStringLiteral("最终剩余资源价值: %1\n")
+                .arg(benchmark.finalRemainingResource);
+    text += QStringLiteral("步数: %1\n").arg(benchmark.steps);
+    text += QStringLiteral("二者比值: %1\n")
+                .arg(benchmark.valueStepRatio, 0, 'f', 3);
+    return text.toUtf8();
+}
+
+QString sanitizedSubmissionLeaderName(const QString &leaderName) {
+    QString result = leaderName.trimmed();
+    static const QString invalid = QStringLiteral("\\/:*?\"<>|");
+    for (const QChar ch : invalid) {
+        result.replace(ch, QLatin1Char('_'));
+    }
+    while (result.contains(QStringLiteral("__"))) {
+        result.replace(QStringLiteral("__"), QStringLiteral("_"));
+    }
+    return result.trimmed().replace(QRegularExpression(QStringLiteral("^_+|_+$")),
+                                    QString());
 }

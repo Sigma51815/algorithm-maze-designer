@@ -982,6 +982,99 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
     return result;
 }
 
+ResourcePlan MazeModel::optimalStartToEndResourceWalk() const {
+    ResourcePlan result;
+    if (cellCount() == 0) {
+        return result;
+    }
+
+    QVector<int> mainPath = mainPathCells();
+    if (mainPath.isEmpty()) {
+        return result;
+    }
+    std::reverse(mainPath.begin(), mainPath.end());
+
+    result.backboneCells = mainPath;
+
+    QVector<QHash<int, int>> directedGain(cellCount());
+    std::function<int(int, int)> calculateGain = [&](int cell, int from) {
+        const auto cached = directedGain[cell].constFind(from);
+        if (cached != directedGain[cell].constEnd()) {
+            return *cached;
+        }
+
+        int value = resourceAt(cell);
+        for (int next : neighbors(cell)) {
+            if (next == from) {
+                continue;
+            }
+            value += std::max(0, calculateGain(next, cell));
+        }
+        directedGain[cell].insert(from, value);
+        return value;
+    };
+
+    QSet<int> collected;
+    int cumulative = 0;
+    auto appendStep = [&](int cell) {
+        result.walk.append(cell);
+        if (!collected.contains(cell)) {
+            collected.insert(cell);
+            result.collectedCells.append(cell);
+            cumulative += resourceAt(cell);
+        }
+        result.cumulativeValues.append(cumulative);
+    };
+
+    std::function<void(int, int)> appendPositiveBranch = [&](int cell, int from) {
+        appendStep(cell);
+        for (int next : neighbors(cell)) {
+            if (next == from) {
+                continue;
+            }
+            if (calculateGain(next, cell) > 0) {
+                appendPositiveBranch(next, cell);
+                appendStep(cell);
+            }
+        }
+    };
+
+    appendStep(mainPath.first());
+    for (int i = 0; i < mainPath.size(); ++i) {
+        const int cell = mainPath[i];
+        const int prevMain = i > 0 ? mainPath[i - 1] : -1;
+        const int nextMain = i + 1 < mainPath.size() ? mainPath[i + 1] : -1;
+        for (int next : neighbors(cell)) {
+            if (next == prevMain || next == nextMain) {
+                continue;
+            }
+            const int gain = calculateGain(next, cell);
+            ResourceBranchDecision decision;
+            decision.attachCell = cell;
+            decision.rootCell = next;
+            decision.gain = gain;
+            decision.selected = gain > 0;
+            if (gain > 0) {
+                appendPositiveBranch(next, cell);
+                appendStep(cell);
+            }
+            result.branchDecisions.append(decision);
+        }
+        if (i + 1 < mainPath.size()) {
+            appendStep(mainPath[i + 1]);
+        }
+    }
+
+    std::sort(result.collectedCells.begin(), result.collectedCells.end());
+    for (int cell : result.collectedCells) {
+        result.maxValue += resourceAt(cell);
+    }
+    // For the S->E benchmark view, yellow should mean every cell that the
+    // submitted route first visits and scores, including profitable detours.
+    result.backboneCells = result.collectedCells;
+    return result;
+}
+
 QStringList MazeModel::expandedGrid() const {
     const int outputRows = rows_ * 2 + 1;
     const int outputColumns = columns_ * 2 + 1;

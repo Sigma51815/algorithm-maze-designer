@@ -17,6 +17,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
@@ -208,9 +209,10 @@ void MainWindow::buildUi() {
     mazeWidget_ = new MazeWidget(splitter);
 
     auto *scrollArea = new QScrollArea(splitter);
+    scrollArea->setObjectName(QStringLiteral("controlSidebar"));
     scrollArea->setWidgetResizable(true);
-    scrollArea->setMinimumWidth(380);
-    scrollArea->setMaximumWidth(460);
+    scrollArea->setMinimumWidth(320);
+    scrollArea->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     scrollArea->setFrameShape(QFrame::NoFrame);
     auto *panel = new QWidget;
     auto *panelLayout = new QVBoxLayout(panel);
@@ -285,6 +287,13 @@ void MainWindow::buildUi() {
     optEnableCheck_->setToolTip(QStringLiteral("默认关闭：GA 优化会消耗大量 CPU。"));
     optEnableCheck_->setChecked(false);
     rightPanel->addWidget(optEnableCheck_);
+
+    optBestMazeCheck_ = new QCheckBox(QStringLiteral("生成最佳迷宫（强力 GA）"));
+    optBestMazeCheck_->setObjectName(QStringLiteral("inputControl"));
+    optBestMazeCheck_->setToolTip(QStringLiteral(
+        "自动启用遗传算法，尝试多组种群、代数和变异率，按内部 finalFitness 最高者作为结果。"));
+    optBestMazeCheck_->setChecked(false);
+    rightPanel->addWidget(optBestMazeCheck_);
 
     auto *optForm = new QFormLayout;
     optForm->setSpacing(4); optForm->setLabelAlignment(Qt::AlignRight);
@@ -387,11 +396,23 @@ void MainWindow::buildUi() {
     optCompareLabel_->setVisible(false);
     generationOuter->addWidget(optCompareLabel_);
 
-    optSaveButton_ = new QPushButton(QStringLiteral("保存最佳迷宫"));
-    optSaveButton_->setObjectName(QStringLiteral("secondaryButton"));
-    optSaveButton_->setEnabled(false);
-    generationOuter->addWidget(optSaveButton_);
-    connect(optSaveButton_, &QPushButton::clicked, this, &MainWindow::saveOptimizedMaze);
+    submissionJsonButton_ = new QPushButton(QStringLiteral("导出最佳迷宫 JSON"));
+    submissionJsonButton_->setObjectName(QStringLiteral("secondaryButton"));
+    submissionJsonButton_->setToolTip(QStringLiteral(
+        "仅在 GA 优化完成后可用，按附件格式生成 best_maze_design_组长名.json"));
+    submissionJsonButton_->setEnabled(false);
+    generationOuter->addWidget(submissionJsonButton_);
+    connect(submissionJsonButton_, &QPushButton::clicked,
+            this, &MainWindow::exportBestMazeSubmissionJson);
+
+    benchmarkTxtButton_ = new QPushButton(QStringLiteral("生成迷宫基准 TXT"));
+    benchmarkTxtButton_->setObjectName(QStringLiteral("secondaryButton"));
+    benchmarkTxtButton_->setToolTip(QStringLiteral(
+        "仅在 GA 优化完成后可用，生成 BOSS 前资源、最终资源、步数和比值"));
+    benchmarkTxtButton_->setEnabled(false);
+    generationOuter->addWidget(benchmarkTxtButton_);
+    connect(benchmarkTxtButton_, &QPushButton::clicked,
+            this, &MainWindow::exportBestMazeBenchmarkTxt);
 
     panelLayout->addWidget(generationGroup);
 
@@ -416,20 +437,33 @@ void MainWindow::buildUi() {
             this, &MainWindow::exportMazeCheckJson);
 
     // GA master switch: lock/unlock the optimization sub-panel.
-    auto updateOptPanelEnabled = [this](bool enabled) {
-        if (optPopSpin_) optPopSpin_->setEnabled(enabled);
-        if (optGenSpin_) optGenSpin_->setEnabled(enabled);
-        if (optMutSpin_) optMutSpin_->setEnabled(enabled);
+    auto updateOptPanelEnabled = [this](bool) {
+        const bool bestMode = optBestMazeCheck_ && optBestMazeCheck_->isChecked();
+        if (bestMode && optEnableCheck_) {
+            optEnableCheck_->setChecked(true);
+        }
+        const bool enabled = optEnableCheck_ && optEnableCheck_->isChecked();
+        if (optEnableCheck_) optEnableCheck_->setEnabled(!bestMode);
+        if (optPopSpin_) optPopSpin_->setEnabled(enabled && !bestMode);
+        if (optGenSpin_) optGenSpin_->setEnabled(enabled && !bestMode);
+        if (optMutSpin_) optMutSpin_->setEnabled(enabled && !bestMode);
+        if (optAdversarialCheck_) optAdversarialCheck_->setEnabled(enabled && !bestMode);
+        if (optAlgoLabel_) {
+            optAlgoLabel_->setText(bestMode
+                ? QStringLiteral("最佳搜索：混合四种基础算法 + 多组 GA 参数")
+                : QStringLiteral("初始：当前基础算法"));
+        }
+        if (optProgressLabel_ && bestMode) {
+            optProgressLabel_->setText(QStringLiteral(
+                "强力 GA 将自动尝试多组种群、代数和变异率，目标为最大 finalFitness。"));
+        }
         // generateButton_ handles its own state via optEnableCheck_
     };
     connect(optEnableCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
+    connect(optBestMazeCheck_, &QCheckBox::toggled, this, updateOptPanelEnabled);
 
     // Lock optimization panel initially (GA off by default).
-    if (!optEnableCheck_->isChecked()) {
-        optPopSpin_->setEnabled(false);
-        optGenSpin_->setEnabled(false);
-        optMutSpin_->setEnabled(false);
-    }
+    updateOptPanelEnabled(optEnableCheck_->isChecked());
 
     panelLayout->addWidget(makeSeparator());
 
@@ -437,6 +471,13 @@ void MainWindow::buildUi() {
     resourceGroup->setObjectName(QStringLiteral("taskGroup"));
     auto *resourceLayout = new QVBoxLayout(resourceGroup);
     resourceLayout->setSpacing(8);
+    resourceModeBox_ = new QComboBox;
+    resourceModeBox_->setObjectName(QStringLiteral("inputControl"));
+    resourceModeBox_->addItem(QStringLiteral("全局资源最优（不强制 S→E）"), 0);
+    resourceModeBox_->addItem(QStringLiteral("S→E 提交基准路径"), 1);
+    resourceModeBox_->setToolTip(QStringLiteral(
+        "全局模式用于任务②资源 DP；S→E 模式用于提交 TXT 的路线基准。"));
+    resourceLayout->addWidget(resourceModeBox_);
     auto *resourceButtons = new QHBoxLayout;
     resourceButtons->setSpacing(8);
     auto *solveResourceButton = new QPushButton(QStringLiteral("DP 求最优路径"));
@@ -457,6 +498,20 @@ void MainWindow::buildUi() {
     resourceProcessOutput_->setPlaceholderText(QStringLiteral("点击「DP 求最优路径」查看主路径、分支收益和累计资源过程"));
     resourceLayout->addWidget(resourceProcessOutput_);
     panelLayout->addWidget(resourceGroup);
+    connect(resourceModeBox_, &QComboBox::currentIndexChanged, this, [this] {
+        lastPlan_ = {};
+        revealedPathPoints_ = 0;
+        if (mazeWidget_) {
+            mazeWidget_->clearSolutionPath();
+            mazeWidget_->clearDpProcessHighlights();
+        }
+        if (resourceResultLabel_) {
+            resourceResultLabel_->setText(QStringLiteral("尚未求解"));
+        }
+        if (resourceProcessOutput_) {
+            resourceProcessOutput_->clear();
+        }
+    });
     connect(solveResourceButton, &QPushButton::clicked, this, &MainWindow::solveResources);
     connect(exportResourceButton, &QPushButton::clicked,
             this, &MainWindow::exportResourcePathJson);
@@ -474,13 +529,13 @@ void MainWindow::buildUi() {
     bossHealthEdit_->setObjectName(QStringLiteral("inputControl"));
     bossHealthEdit_->setPlaceholderText(QStringLiteral("如 35,45,60"));
     bossHealthEdit_->setToolTip(QStringLiteral("各 BOSS 血量，逗号分隔"));
-    bossHealthEdit_->setMinimumWidth(320);
+    bossHealthEdit_->setMinimumWidth(260);
     skillsEdit_ = new QLineEdit(
         QStringLiteral("强力攻击:8:4;普通攻击:2:0;连击:4:2;重击:6:3"));
     skillsEdit_->setObjectName(QStringLiteral("inputControl"));
     skillsEdit_->setPlaceholderText(QStringLiteral("名称:伤害:冷却;..."));
     skillsEdit_->setToolTip(QStringLiteral("如 普通攻击:5:0;重击:10:2"));
-    skillsEdit_->setMinimumWidth(320);
+    skillsEdit_->setMinimumWidth(260);
     damageModeBox_ = new QComboBox;
     damageModeBox_->setObjectName(QStringLiteral("inputControl"));
     damageModeBox_->addItem(QStringLiteral("伤害不溢出（测试口径）"),
@@ -561,8 +616,10 @@ void MainWindow::buildUi() {
     scrollArea->setWidget(panel);
     splitter->addWidget(mazeWidget_);
     splitter->addWidget(scrollArea);
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 0);
+    splitter->setChildrenCollapsible(false);
+    splitter->setStretchFactor(0, 3);
+    splitter->setStretchFactor(1, 1);
+    splitter->setSizes({840, 420});
     setCentralWidget(splitter);
 
     generationTimer_ = new QTimer(this);
@@ -741,7 +798,8 @@ void MainWindow::generateMaze() {
     optimizedMaze_ = {};
     preOptMaze_ = {};
     optCompareLabel_->setVisible(false);
-    optSaveButton_->setEnabled(false);
+    if (submissionJsonButton_) submissionJsonButton_->setEnabled(false);
+    if (benchmarkTxtButton_) benchmarkTxtButton_->setEnabled(false);
     ++generationId_;   // bump so any in-flight GA callback can detect staleness
 }
 
@@ -751,7 +809,11 @@ void MainWindow::solveResources() {
     }
     generationTimer_->stop();
     mazeWidget_->setRevealCount(maze_.generationSteps().size());
-    lastPlan_ = maze_.optimalResourceWalk();
+    const bool useStartToEndMode =
+        resourceModeBox_ && resourceModeBox_->currentData().toInt() == 1;
+    lastPlan_ = useStartToEndMode
+        ? maze_.optimalStartToEndResourceWalk()
+        : maze_.optimalResourceWalk();
     const QString pathText = formatMatrixPath(maze_, lastPlan_.walk);
     const int collectedCells = lastPlan_.collectedCells.size();
     QVector<int> selectedBranchCells;
@@ -771,10 +833,13 @@ void MainWindow::solveResources() {
     }
     // 展示 DP 结果：文本给出最大资源和路径，MazeWidget 负责高亮分支并播放 walk。
     resourceResultLabel_->setText(
-        QStringLiteral("<b>最多资源：%1</b>  |  行走 %2 步  |  首经 %3 格<br/>"
+        QStringLiteral("<b>%1：%2</b>  |  行走 %3 步  |  首经 %4 格<br/>"
                        "<span style='color:#7c2d12;font-size:11px'>"
-                       "最优资源路径（矩阵坐标）：%4</span><br/>"
+                       "最优资源路径（矩阵坐标）：%5</span><br/>"
                        "<span style='color:#94a3b8;font-size:11px'>路径允许回访，金币/陷阱只计一次</span>")
+            .arg(useStartToEndMode
+                     ? QStringLiteral("S→E 最终资源")
+                     : QStringLiteral("最多资源"))
             .arg(lastPlan_.maxValue)
             .arg(std::max(0, static_cast<int>(lastPlan_.walk.size()) - 1))
             .arg(collectedCells)
@@ -1039,7 +1104,8 @@ void MainWindow::loadMaze() {
     optimizedMaze_ = {};
     preOptMaze_ = {};
     optCompareLabel_->setVisible(false);
-    optSaveButton_->setEnabled(false);
+    if (submissionJsonButton_) submissionJsonButton_->setEnabled(false);
+    if (benchmarkTxtButton_) benchmarkTxtButton_->setEnabled(false);
 
     if (root.contains(QStringLiteral("B"))) {
         const QJsonArray bosses = root.value(QStringLiteral("B")).toArray();
@@ -1194,12 +1260,21 @@ void MainWindow::exportResourcePathJson() {
         return;
     }
     if (lastPlan_.walk.isEmpty()) {
-        lastPlan_ = maze_.optimalResourceWalk();
+        const bool useStartToEndMode =
+            resourceModeBox_ && resourceModeBox_->currentData().toInt() == 1;
+        lastPlan_ = useStartToEndMode
+            ? maze_.optimalStartToEndResourceWalk()
+            : maze_.optimalResourceWalk();
     }
 
     const QJsonObject root = buildResourcePathCheckInput(maze_, lastPlan_.walk);
 
-    const QString defaultName = QStringLiteral("resource_path_%1x%2.json")
+    const bool exportingStartToEnd =
+        resourceModeBox_ && resourceModeBox_->currentData().toInt() == 1;
+    const QString defaultName = QStringLiteral("%1_%2x%3.json")
+                                    .arg(exportingStartToEnd
+                                             ? QStringLiteral("resource_path_se")
+                                             : QStringLiteral("resource_path"))
                                     .arg(maze_.rows() * 2 + 1)
                                     .arg(maze_.columns() * 2 + 1);
     const QString path = QFileDialog::getSaveFileName(
@@ -1312,6 +1387,8 @@ void MainWindow::runOptimizer() {
     }
 
     generateButton_->setEnabled(false);  // prevent re-entry while GA is running
+    if (submissionJsonButton_) submissionJsonButton_->setEnabled(false);
+    if (benchmarkTxtButton_) benchmarkTxtButton_->setEnabled(false);
     const int genAtStart = generationId_;  // capture for staleness detection
 
     OptimizerConfig cfg;
@@ -1325,15 +1402,27 @@ void MainWindow::runOptimizer() {
     cfg.coinValue = coinValueSpin_->value();
     cfg.trapValue = -trapValueSpin_->value();
     cfg.seed = static_cast<quint32>(seedSpin_->value());
-    cfg.useMixedAlgorithms = false;
+    const bool bestMode = optBestMazeCheck_ && optBestMazeCheck_->isChecked();
+    cfg.useBestMazeSearch = bestMode;
+    cfg.useMixedAlgorithms = bestMode;
     cfg.baseAlgorithm = static_cast<MazeAlgorithm>(algorithmBox_->currentIndex());
-    cfg.useAdversarialPlacement = optAdversarialCheck_->isChecked();
+    cfg.useAdversarialPlacement = bestMode || optAdversarialCheck_->isChecked();
     cfg.useSmartPlacement = !cfg.useAdversarialPlacement;
     cfg.useEnhancedFitness = true;
     preOptMaze_ = maze_;  // snapshot for before/after comparison
     cfg.topoWeight = 0.3;
 
-    optProgressLabel_->setText(QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
+    int totalGenerations = cfg.generations;
+    if (bestMode) {
+        totalGenerations = 0;
+        for (const OptimizerConfig &preset : MazeOptimizer::bestMazeSearchPresets(cfg)) {
+            totalGenerations += preset.generations;
+        }
+    }
+
+    optProgressLabel_->setText(bestMode
+        ? QStringLiteral("正在强力搜索最佳迷宫... 第 0 / %1 代").arg(totalGenerations)
+        : QStringLiteral("正在优化... 第 0 / %1 代").arg(cfg.generations));
 
     auto *optimizer = new MazeOptimizer;
     optimizer->setConfig(cfg);
@@ -1345,11 +1434,19 @@ void MainWindow::runOptimizer() {
 
     connect(optimizer, &MazeOptimizer::generationFinished, this,
             [this, cfg](const OptimizerStats &stats) {
+                const int total = stats.totalGenerations > 0
+                    ? stats.totalGenerations
+                    : cfg.generations;
+                const QString prefix = cfg.useBestMazeSearch
+                    ? QStringLiteral("强力GA %1/%2 | ")
+                          .arg(stats.runIndex)
+                          .arg(stats.runCount)
+                    : QString();
                 optProgressLabel_->setText(
-                    QStringLiteral("第 %1 / %2 代  |  适应度 %3  |  平均 %4<br/>"
-                                   "DP最优 %5  |  Greedy %6  |  Regret %7")
+                    prefix + QStringLiteral("第 %1 / %2 代  |  适应度 %3  |  平均 %4<br/>"
+                                            "DP最优 %5  |  Greedy %6  |  Regret %7")
                         .arg(stats.generation)
-                        .arg(cfg.generations)
+                        .arg(total)
                         .arg(stats.bestFitness, 0, 'f', 1)
                         .arg(stats.avgFitness, 0, 'f', 1)
                         .arg(stats.bestDpScore)
@@ -1371,27 +1468,30 @@ void MainWindow::runOptimizer() {
                 optimizedMaze_ = bestMaze;
                 hasOptimizedMaze_ = true;
                 lastOptConfig_ = cfg;
-                optSaveButton_->setEnabled(true);
+                if (submissionJsonButton_) submissionJsonButton_->setEnabled(true);
+                if (benchmarkTxtButton_) benchmarkTxtButton_->setEnabled(true);
                 generationTimer_->stop();  // stop animation on previous maze
                 maze_ = optimizedMaze_;
                 mazeWidget_->setMaze(maze_);
                 mazeWidget_->clearAiPath();
                 updateValidation();
 
-                ResourcePlan dp = optimizedMaze_.optimalResourceWalk();
-                int worstGreedy = MazeEvaluator::evaluateGreedyWorst(optimizedMaze_);
-                lastOptDpScore_ = dp.maxValue;
-                lastOptGreedyScore_ = worstGreedy;
-                lastOptFitness_ = dp.maxValue - worstGreedy;
+                EvaluatorConfig finalEc;
+                finalEc.skipPlacement = true;
+                finalEc.topoWeight = cfg.topoWeight;
+                EvalResult finalEval = MazeEvaluator::evaluate(optimizedMaze_, finalEc);
+                lastOptDpScore_ = finalEval.dpScore;
+                lastOptGreedyScore_ = finalEval.worstGreedyScore;
+                lastOptFitness_ = finalEval.finalFitness;
 
 
                 // Auto-show comparison between pre-optimization and optimized maze.
                 if (preOptMaze_.cellCount() > 0) {
                     EvaluatorConfig ec;
                     ec.skipPlacement = true;
-                    ec.topoWeight = 0.3;
+                    ec.topoWeight = cfg.topoWeight;
                     EvalResult before = MazeEvaluator::evaluate(preOptMaze_, ec);
-                    EvalResult after = MazeEvaluator::evaluate(optimizedMaze_, ec);
+                    EvalResult after = finalEval;
                     auto row = [](const QString &name,
                                   const QString &beforeValue,
                                   const QString &afterValue,
@@ -1497,26 +1597,146 @@ void MainWindow::applyOptimizedMaze() {
     statusBar()->showMessage(QStringLiteral("已应用遗传优化迷宫"), 5000);
 }
 
-void MainWindow::saveOptimizedMaze() {
-    if (!hasOptimizedMaze_) {
+void MainWindow::exportBestMazeSubmissionJson() {
+    if (!optEnableCheck_->isChecked() || !hasOptimizedMaze_
+        || optimizedMaze_.cellCount() == 0) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("请先启用 GA 优化并等待最佳迷宫生成完成。"));
         return;
     }
-    const QString defaultName = QStringLiteral("ga_maze_%1x%2_f%3.json")
-                                    .arg(lastOptConfig_.rows)
-                                    .arg(lastOptConfig_.columns)
-                                    .arg(lastOptFitness_);
-    const QString path = QFileDialog::getSaveFileName(
-        this, QStringLiteral("保存最佳优化迷宫"), defaultName,
+
+    const int matrixRows = optimizedMaze_.rows() * 2 + 1;
+    const int matrixCols = optimizedMaze_.columns() * 2 + 1;
+    if (matrixRows != 15 || matrixCols != 15) {
+        QMessageBox::warning(
+            this, QStringLiteral("无法导出"),
+            QStringLiteral("提交迷宫必须是 15×15 矩阵；当前是 %1×%2。请把行数/列数设为 15 后重新运行 GA。")
+                .arg(matrixRows)
+                .arg(matrixCols));
+        return;
+    }
+
+    bool healthOk = false;
+    bool skillsOk = false;
+    const QVector<int> health = parseBossHealth(&healthOk);
+    const QVector<BossSkill> skills = parseSkills(&skillsOk);
+    if (!healthOk || !skillsOk) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("请先填写正确的 BOSS 血量与玩家技能。"));
+        return;
+    }
+
+    const DamageOverflowMode damageMode = selectedDamageMode();
+    BossFullResult fullResult = BossSolver::solveWithMaze(
+        optimizedMaze_, health, skills, selectedRoundExtraTurns(), damageMode);
+    if (!fullResult.solved
+        || !BossSolver::verify(health, skills, fullResult.skillSequence, damageMode)) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("当前 BOSS 参数没有可行技能序列。"));
+        return;
+    }
+
+    bool ok = false;
+    const QString leaderInput = QInputDialog::getText(
+        this, QStringLiteral("组长名"),
+        QStringLiteral("请输入组长名，用于文件名 best_maze_design_组长名："),
+        QLineEdit::Normal, QString(), &ok);
+    if (!ok) {
+        return;
+    }
+    const QString leaderName = sanitizedSubmissionLeaderName(leaderInput);
+    if (leaderName.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("无法导出"),
+                             QStringLiteral("组长名不能为空，且不能只包含文件名非法字符。"));
+        return;
+    }
+
+    const QString defaultName = QStringLiteral("best_maze_design_%1.json").arg(leaderName);
+    const QString jsonPath = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出最佳迷宫 JSON"), defaultName,
         QStringLiteral("JSON 文件 (*.json)"));
-    if (path.isEmpty()) {
+    if (jsonPath.isEmpty()) {
         return;
     }
-    if (MazeSaver::saveGAResult(path, optimizedMaze_, lastOptConfig_,
-                                lastOptFitness_, lastOptDpScore_,
-                                lastOptGreedyScore_)) {
-        statusBar()->showMessage(QStringLiteral("已保存最佳迷宫：%1").arg(path), 5000);
-    } else {
-        QMessageBox::critical(this, QStringLiteral("保存失败"),
-                              QStringLiteral("无法写入文件：%1").arg(path));
+
+    const QByteArray json = serializeAiPlayerInput(
+        optimizedMaze_, health, skills, fullResult.roundLimit,
+        fullResult.coinConsumption);
+
+    QSaveFile jsonFile(jsonPath);
+    if (!jsonFile.open(QIODevice::WriteOnly)
+        || jsonFile.write(json) < 0
+        || !jsonFile.commit()) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"),
+                              QStringLiteral("无法写入 JSON：%1").arg(jsonPath));
+        return;
     }
+
+    statusBar()->showMessage(
+        QStringLiteral("已导出最佳迷宫 JSON：%1").arg(jsonPath), 8000);
+}
+
+void MainWindow::exportBestMazeBenchmarkTxt() {
+    if (!optEnableCheck_->isChecked() || !hasOptimizedMaze_
+        || optimizedMaze_.cellCount() == 0) {
+        QMessageBox::warning(this, QStringLiteral("无法生成"),
+                             QStringLiteral("请先启用 GA 优化并等待最佳迷宫生成完成。"));
+        return;
+    }
+
+    const int matrixRows = optimizedMaze_.rows() * 2 + 1;
+    const int matrixCols = optimizedMaze_.columns() * 2 + 1;
+    if (matrixRows != 15 || matrixCols != 15) {
+        QMessageBox::warning(
+            this, QStringLiteral("无法生成"),
+            QStringLiteral("提交迷宫必须是 15×15 矩阵；当前是 %1×%2。请把行数/列数设为 15 后重新运行 GA。")
+                .arg(matrixRows)
+                .arg(matrixCols));
+        return;
+    }
+
+    bool ok = false;
+    const QString leaderInput = QInputDialog::getText(
+        this, QStringLiteral("组长名"),
+        QStringLiteral("请输入组长名，用于文件名 best_maze_design_组长名："),
+        QLineEdit::Normal, QString(), &ok);
+    if (!ok) {
+        return;
+    }
+    const QString leaderName = sanitizedSubmissionLeaderName(leaderInput);
+    if (leaderName.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("无法生成"),
+                             QStringLiteral("组长名不能为空，且不能只包含文件名非法字符。"));
+        return;
+    }
+
+    const QString defaultName = QStringLiteral("best_maze_design_%1.txt").arg(leaderName);
+    const QString txtPath = QFileDialog::getSaveFileName(
+        this, QStringLiteral("生成迷宫基准 TXT"), defaultName,
+        QStringLiteral("TXT 文件 (*.txt)"));
+    if (txtPath.isEmpty()) {
+        return;
+    }
+
+    const ResourcePlan plan = optimizedMaze_.optimalStartToEndResourceWalk();
+    MazeBenchmarkResult benchmark;
+    benchmark.bossBeforeResource = plan.maxValue;
+    benchmark.finalRemainingResource = plan.maxValue;
+    benchmark.steps = std::max(0, static_cast<int>(plan.walk.size()) - 1);
+    benchmark.valueStepRatio = benchmark.steps > 0
+        ? static_cast<double>(benchmark.finalRemainingResource) / benchmark.steps
+        : 0.0;
+
+    QSaveFile txtFile(txtPath);
+    const QByteArray txt = serializeMazeBenchmarkText(benchmark);
+    if (!txtFile.open(QIODevice::WriteOnly)
+        || txtFile.write(txt) < 0
+        || !txtFile.commit()) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"),
+                              QStringLiteral("无法写入 TXT：%1").arg(txtPath));
+        return;
+    }
+
+    statusBar()->showMessage(
+        QStringLiteral("已生成迷宫基准 TXT：%1").arg(txtPath), 8000);
 }

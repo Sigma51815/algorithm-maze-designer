@@ -29,6 +29,7 @@ struct OptimizerConfig {
     bool useSmartPlacement = true;
     bool useAdversarialPlacement = false;
     bool useEnhancedFitness = true;
+    bool useBestMazeSearch = false;
     double topoWeight = 0.3;
 };
 
@@ -40,6 +41,9 @@ struct OptimizerStats {
     int bestDpScore = 0;
     int bestGreedyScore = 0;
     bool rlUsed = false;
+    int totalGenerations = 0;
+    int runIndex = 1;
+    int runCount = 1;
 };
 
 class MazeOptimizer : public QObject {
@@ -59,6 +63,7 @@ public:
     // Round-robins the four base maze algorithms by index:
     // 0→DivideAndConquer, 1→KruskalMst, 2→DFS, 3→BFS, 4→DivideAndConquer, ...
     static MazeAlgorithm algorithmForIndex(int index);
+    static QVector<OptimizerConfig> bestMazeSearchPresets(const OptimizerConfig &base);
 
 signals:
     void generationFinished(const OptimizerStats &stats);
@@ -76,6 +81,9 @@ private:
     std::atomic<bool> stopped_{false};
     std::mt19937 rng_;
 
+    Chromosome runSingle(int generationOffset, int totalGenerations,
+                         int runIndex, int runCount);
+    MazeModel runBestMazeSearch();
     Chromosome randomChromosome(int index, quint32 seed);
     double evaluateFitness(Chromosome &chrom);
     Chromosome crossover(const Chromosome &a, const Chromosome &b);
