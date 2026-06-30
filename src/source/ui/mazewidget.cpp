@@ -135,12 +135,14 @@ void MazeWidget::paintEvent(QPaintEvent *) {
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(255, 229, 153, 115));
+    // 任务②可视化：黄色为 DP 选中的收集区域。
     for (int cell : dpBackbone_) {
         if (cell != maze_.startCell() && cell != maze_.endCell()) {
             painter.drawRect(rectOf(cell).adjusted(2, 2, -2, -2));
         }
     }
     painter.setBrush(QColor(125, 211, 252, 100));
+    // 蓝色为正收益分支，表示值得绕进去收集。
     for (int cell : dpSelectedBranchCells_) {
         painter.drawRect(rectOf(cell).adjusted(3, 3, -3, -3));
     }
@@ -148,6 +150,7 @@ void MazeWidget::paintEvent(QPaintEvent *) {
         QPen rejectedPen(QColor("#b91c1c"), std::max(1.0, cellSize * 0.06));
         painter.setPen(rejectedPen);
         painter.setBrush(Qt::NoBrush);
+        // 红框为非正收益分支入口，表示 DP 选择放弃。
         for (int cell : dpRejectedBranchRoots_) {
             painter.drawRect(rectOf(cell).adjusted(4, 4, -4, -4));
         }
@@ -155,6 +158,7 @@ void MazeWidget::paintEvent(QPaintEvent *) {
     }
 
     if (visiblePathPoints_ > 1) {
+        // solutionPath_ 来自 ResourcePlan::walk，逐点连线显示实际合法行走路径。
         QPainterPath path(centerOf(solutionPath_[0]));
         for (int i = 1; i < visiblePathPoints_; ++i) {
             path.lineTo(centerOf(solutionPath_[i]));

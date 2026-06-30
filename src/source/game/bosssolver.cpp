@@ -1,5 +1,11 @@
 // 文件职责：BOSS 战分支限界求解。
 // 通过状态记忆、冷却约束和剪枝搜索，求出击败所有 BOSS 的最少回合方案。
+/**主要功能：
+BOSS 战用分支限界。每个状态由 BOSS 剩余血量和技能冷却组成。先用贪心策略得到一个合法技能序列作为上界 bestTurns。
+搜索时，每一回合只枚举冷却为 0 的技能作为分支。对每个状态，用剩余总血量除以最大技能伤害，并结合冷却估计乐观下界。
+如果当前回合数加下界已经不能优于上界，就剪枝。
+同时用 stateKey(health, cooldowns) 记录状态，如果同一状态以前用更少回合到达过，也剪枝。
+最后用 verify() 逐回合重放技能序列，验证冷却约束和击败结果。**/
 #include "bosssolver.h"
 
 #include "maze.h"
@@ -22,6 +28,7 @@ int firstLivingBoss(const QVector<int> &health) {
 }
 
 QString stateKey(const QVector<int> &health, const QVector<int> &cooldowns) {
+    // 状态记忆键：剩余血量 + 技能冷却，相同状态只保留更早到达的搜索分支。
     QString key;
     key.reserve((health.size() + cooldowns.size()) * 5);
     for (int value : health) {
@@ -40,6 +47,7 @@ void applySkill(QVector<int> &health,
                 int skillIndex,
                 DamageOverflowMode damageMode) {
     const int boss = firstLivingBoss(health);
+    // 仿真一回合：技能先作用于当前存活 BOSS，溢出模式下多余伤害顺延。
     if (damageMode == DamageOverflowMode::Overflow) {
         int remainingDamage = skills[skillIndex].damage;
         for (int target = boss; target < health.size() && remainingDamage > 0; ++target) {
@@ -53,6 +61,7 @@ void applySkill(QVector<int> &health,
     for (int &cooldown : cooldowns) {
         cooldown = std::max(0, cooldown - 1);
     }
+    // 当前技能重新进入冷却；搜索和 verify 都只允许 cooldown == 0 的技能被选。
     cooldowns[skillIndex] = skills[skillIndex].cooldown;
 }
 
@@ -60,6 +69,7 @@ int optimisticTurnLowerBound(int remainingHealth,
                              const QVector<BossSkill> &skills,
                              const QVector<int> &cooldowns,
                              int maxTurns) {
+    // 乐观下界：从“剩余血量 / 最大伤害”起步，再估算冷却限制下的最大伤害容量。
     int maxDamage = 0;
     for (const BossSkill &skill : skills) {
         maxDamage = std::max(maxDamage, skill.damage);
@@ -79,7 +89,7 @@ int optimisticTurnLowerBound(int remainingHealth,
         damageCapacity = std::min<qint64>(damageCapacity,
                                           static_cast<qint64>(turns) * maxDamage);
         if (damageCapacity >= remainingHealth) {
-            return turns;
+            return turns;// 说明 turns 回合内有能力击败所有 BOSS，返回乐观下界。
         }
     }
     return maxTurns + 1;
@@ -87,7 +97,7 @@ int optimisticTurnLowerBound(int remainingHealth,
 
 } // namespace
 
-// 分支限界核心：在技能冷却和伤害模式约束下搜索最少回合，并用状态记忆避免重复展开。
+// 任务③入口：先用贪心序列给出上界，再用下界估计、状态记忆和冷却约束做分支限界搜索。
 BossResult BossSolver::solve(const QVector<int> &bossHealth,
                              const QVector<BossSkill> &skills,
                              DamageOverflowMode damageMode) {
@@ -116,6 +126,8 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth,
     QVector<int> greedyHealth = bossHealth;
     QVector<int> greedyCooldowns(skills.size(), 0);
     QVector<int> bestSequence;
+    // 初始上界：每回合选当前可用的最高伤害技能，先得到一个合法解。
+    //贪心序列不一定最优，但一定是个合法解
     while (firstLivingBoss(greedyHealth) >= 0) {
         int chosen = -1;
         for (int i = 0; i < skills.size(); ++i) {
@@ -138,6 +150,7 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth,
     std::function<void(QVector<int>, QVector<int>, int)> search =
         [&](QVector<int> health, QVector<int> cooldowns, int depth) {
             ++result.expandedStates;
+            // 找到可行解时更新上界 bestTurns 和当前最优技能序列。
             if (firstLivingBoss(health) < 0) {
                 if (depth < bestTurns) {
                     bestTurns = depth;
@@ -145,18 +158,18 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth,
                 }
                 return;
             }
-
+            //// 下界剪枝：最乐观也不能优于当前上界，就停止展开
             int remainingHealth = 0;
             for (int value : health) {
                 remainingHealth += std::max(0, value);
             }
             const int optimisticTurns = optimisticTurnLowerBound(
-                remainingHealth, skills, cooldowns, bestTurns - depth - 1);
+                remainingHealth, skills, cooldowns, bestTurns - depth - 1);。
             if (depth + optimisticTurns >= bestTurns) {
                 ++result.prunedStates;
                 return;
             }
-
+            //// 状态剪枝：同一局面如果曾用更少回合到达，当前分支不可能更优。
             const QString key = stateKey(health, cooldowns);
             const auto previous = bestDepthForState.constFind(key);
             if (previous != bestDepthForState.constEnd() && *previous <= depth) {
@@ -168,16 +181,18 @@ BossResult BossSolver::solve(const QVector<int> &bossHealth,
             QVector<int> choices;
             for (int i = 0; i < skills.size(); ++i) {
                 if (cooldowns[i] == 0) {
-                    choices.append(i);
+                    choices.append(i);// 当前回合可用的技能编号。 
                 }
             }
+            // 优先试高伤害技能，尽早压低上界，提高后续剪枝效果。
             std::sort(choices.begin(), choices.end(), [&](int first, int second) {
                 return skills[first].damage > skills[second].damage;
             });
 
             for (int skillIndex : choices) {
-                QVector<int> nextHealth = health;
-                QVector<int> nextCooldowns = cooldowns;
+                // 每个可用技能形成一个分支；递归返回后 removeLast() 完成回溯。
+                QVector<int> nextHealth = health;// 复制当前血量状态，避免修改原状态。
+                QVector<int> nextCooldowns = cooldowns;// 复制当前冷却状态，避免修改原状态。
                 applySkill(nextHealth, nextCooldowns, skills, skillIndex, damageMode);
                 currentSequence.append(skillIndex);
                 search(std::move(nextHealth), std::move(nextCooldowns), depth + 1);
@@ -196,8 +211,10 @@ bool BossSolver::verify(const QVector<int> &bossHealth,
                         const QVector<BossSkill> &skills,
                         const QVector<int> &sequence,
                         DamageOverflowMode damageMode) {
+    // 验证给定技能序列是否能在冷却约束下击败所有 BOSS。
     QVector<int> health = bossHealth;
     QVector<int> cooldowns(skills.size(), 0);
+    // 逐回合重放序列，验证技能编号、冷却约束和最终击败结果。
     for (int skillIndex : sequence) {
         if (firstLivingBoss(health) < 0 || skillIndex < 0 || skillIndex >= skills.size()
             || cooldowns[skillIndex] != 0) {

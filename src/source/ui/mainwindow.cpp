@@ -769,6 +769,7 @@ void MainWindow::solveResources() {
             rejectedBranchRoots.append(decision.rootCell);
         }
     }
+    // 展示 DP 结果：文本给出最大资源和路径，MazeWidget 负责高亮分支并播放 walk。
     resourceResultLabel_->setText(
         QStringLiteral("<b>最多资源：%1</b>  |  行走 %2 步  |  首经 %3 格<br/>"
                        "<span style='color:#7c2d12;font-size:11px'>"
@@ -875,6 +876,7 @@ void MainWindow::solveBossBattle() {
     const DamageOverflowMode damageMode = selectedDamageMode();
     lastBossResult_ = BossSolver::solveWithMaze(
         maze_, health, skills, selectedRoundExtraTurns(), damageMode);
+    // 输出前再次仿真，确保技能序列满足冷却约束并能击败全部 BOSS。
     if (!lastBossResult_.solved
         || !BossSolver::verify(health, skills, lastBossResult_.skillSequence, damageMode)) {
         bossOutput_->setPlainText(QStringLiteral("未找到可验证的技能序列。"));

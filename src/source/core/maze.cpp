@@ -1,4 +1,4 @@
-#include "maze.h"
+﻿#include "maze.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -798,25 +798,53 @@ QVector<int> MazeModel::mainPathCells() const {
     return result;
 }
 
+/*主要思路：
+    DP 最优路线本质上是把完美迷宫看成树，用树形 DP 选择最大净收益连通子树
+    再用 DFS 把选中的子树还原成一条合法行走路径。
+*/
 ResourcePlan MazeModel::optimalResourceWalk() const {
     ResourcePlan result;
     if (cellCount() == 0) {
         return result;
     }
 
-    // 完美迷宫是一棵树，因此“从某条边进入一个子树能获得多少净收益”
-    // 可以用记忆化递归计算。负收益子树会被舍弃，正收益子树才值得绕路收集。
+    // 任务② - 动态规划资源收集（最大资源数）：
+    //
+    // 1. 为什么这里能用树形 DP？
+    //    本项目生成的是“完美迷宫”，任意两个格子之间只有一条路，所以把通路看成边、
+    //    把格子看成点时，整个迷宫就是一棵树。树上没有环，走进一个分支后，
+    //    这个分支内部能拿多少资源，不会被其他路径影响，适合自底向上计算。
+    //
+    // 2. calculateGain(cell, from) 是本题的 DP 状态：
+    //    假设我们从 from 这个格子进入 cell，然后只在 cell 这一侧的子树里活动，
+    //    这个函数返回“这一侧最多能贡献多少净资源”。
+    //    resourceAt(cell) 可能是金币正数、陷阱负数、普通格 0。
+    //
+    // 3. 状态转移：
+    //    value = 当前格资源 + 所有值得进入的子分支收益。
+    //    子分支收益写成 max(0, calculateGain(next, cell))：
+    //    - 如果子分支收益 > 0，说明金币收益能覆盖陷阱损失，进入它会让总资源变多；
+    //    - 如果子分支收益 <= 0，说明进去后最多不赚甚至亏，直接不走这个分支。
+    //
+    //    不是看到金币就一定拿，因为拿金币可能要经过陷阱。DP 会先算出每个分支的净收益，
+    //    只保留净收益为正的分支，所以能权衡拿不拿某些金币。
     QVector<QHash<int, int>> directedGain(cellCount());
     std::function<int(int, int)> calculateGain = [&](int cell, int from) {
+        // directedGain[cell][from] 记住“从 from 进入 cell”这个方向上的 DP 结果。
+        // 同一个方向可能被多个根节点尝试时重复用到，缓存后不用反复递归计算。
         const auto cached = directedGain[cell].constFind(from);
         if (cached != directedGain[cell].constEnd()) {
             return *cached;
         }
+
+        // 先把当前格子的资源加入收益：金币为正，陷阱为负，空地为 0。
         int value = resourceAt(cell);
         for (int next : neighbors(cell)) {
             if (next == from) {
+                // from 是来时的父节点，跳过它，避免递归又走回去。
                 continue;
             }
+            // 只累加正收益子树；非正收益子树相当于“不去”，贡献按 0 处理。
             value += std::max(0, calculateGain(next, cell));
         }
         directedGain[cell].insert(from, value);
@@ -825,8 +853,9 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
 
     int bestRoot = 0;
     int bestValue = std::numeric_limits<int>::min();
-    // 尝试每个格子作为收集路径根节点，找到全局最优资源收益。
-    // 这个结果在优化评估中作为“理想玩家”的上限分数。
+    // 上面的 DP 只回答“从某个入口进入某侧子树能赚多少”。
+    // 这里再枚举每个格子作为收集区域的根 bestRoot，找到全局净收益最大的连通区域。
+    // 这样不强制路径必须经过起点或终点，只专注于任务②要求的“资源收集最大值”。
     for (int cell = 0; cell < cellCount(); ++cell) {
         const int value = calculateGain(cell, -1);
         if (value > bestValue) {
@@ -837,16 +866,21 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
 
     QSet<int> selected;
     std::function<void(int, int)> selectPositiveSubtree = [&](int cell, int from) {
+        // selected 保存最终决定要经过的格子集合，也就是 DP 选出来的最优收集区域。
         selected.insert(cell);
         for (int next : neighbors(cell)) {
             if (next == from) {
                 continue;
             }
             if (calculateGain(next, cell) > 0) {
+                // 只有正收益分支才继续加入 selected；这一步把“DP 的计算结果”变成“实际要走的格子”。
                 selectPositiveSubtree(next, cell);
             }
         }
     };
+    // 如果最优区域总体收益为正，或者根节点本身不是陷阱，就从 bestRoot 开始选择正收益分支。
+    // 如果整个迷宫资源都很差，至少保留 bestRoot 一个格子，避免结果路径为空。
+    // 因为 selected 只沿 neighbors() 扩展，后面生成的路径不会穿墙。
     if (bestValue > 0 || resourceAt(bestRoot) >= 0) {
         selectPositiveSubtree(bestRoot, -1);
     } else {
@@ -879,6 +913,9 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
         if (!selected.contains(next)) {
             continue;
         }
+        // branchDecisions 是给验收讲解和 UI 用的：
+        // attachCell 表示从哪个格子接入分支，rootCell 表示分支入口，
+        // gain 是这个分支的 DP 净收益，cells 是这个分支里实际被选中的格子。
         ResourceBranchDecision decision;
         decision.attachCell = bestRoot;
         decision.rootCell = next;
@@ -896,6 +933,9 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
             if (selected.contains(next) || cell > next) {
                 continue;
             }
+            // 这里专门记录“挨着最优区域、但没有被选中”的分支。
+            // 如果 gain <= 0，说明这个分支即使可能有金币，也会被陷阱或绕路区域抵消；
+            // UI 会把它画成红框，验收时可以指着它说明“DP 为什么放弃这个分支”。
             ResourceBranchDecision decision;
             decision.attachCell = cell;
             decision.rootCell = next;
@@ -912,6 +952,10 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
             if (next == from || !selected.contains(next)) {
                 continue;
             }
+            // 生成一条真正可行的行走路径：
+            // 先从当前格走到子节点 next，递归走完 next 的分支，再走回当前格。
+            // 这样得到的是“深度优先遍历”的路线，每一步都是相邻通路，满足路径合法性。
+            // 回到当前格会造成回访，这是允许的；资源是否重复计分由下面 collectedCells 控制。
             result.walk.append(next);
             appendSelectedWalk(next, cell);
             result.walk.append(cell);
@@ -922,13 +966,17 @@ ResourcePlan MazeModel::optimalResourceWalk() const {
     int cumulative = 0;
     for (int cell : result.walk) {
         if (!result.collectedCells.contains(cell)) {
+            // 首次经过某格才把资源加入累计值；之后回访同一格不再加金币、也不再扣陷阱。
+            // 这正好对应评分标准里的“金币/陷阱只首次计分”。
             result.collectedCells.append(cell);
             cumulative += resourceAt(cell);
         }
+        // cumulativeValues 和 walk 一一对应，用于 UI 展示“走到第 i 步时累计资源是多少”。
         result.cumulativeValues.append(cumulative);
     }
     std::sort(result.collectedCells.begin(), result.collectedCells.end());
     for (int cell : result.collectedCells) {
+        // 最终最大资源数按去重后的 collectedCells 重新求和，避免回访导致重复计分。
         result.maxValue += resourceAt(cell);
     }
     return result;

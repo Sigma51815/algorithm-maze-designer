@@ -31,6 +31,7 @@ struct ResourceBranchDecision {
     QVector<int> cells;
 };
 
+// 任务② DP 的输出包：同时保存最大资源数、实际路径、首次计分格子和分支取舍记录。
 struct ResourcePlan {
     int maxValue = 0;
     QVector<int> walk;
